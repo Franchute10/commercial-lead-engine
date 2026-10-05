@@ -1,11 +1,23 @@
-"""SQLAlchemy connection adapter; no schema or discovery is created yet."""
+"""Engine construction and SQLite foreign-key enforcement."""
 
-from sqlalchemy import Engine, create_engine, text
+import sqlite3
+
+from sqlalchemy import Engine, create_engine, event, text
+
+DEFAULT_DATABASE_URL = "sqlite+pysqlite:///lead_engine.db"
 
 
 def build_engine(url: str = "sqlite+pysqlite:///:memory:") -> Engine:
-    """Accept SQLAlchemy URLs to allow a later PostgreSQL adapter/driver."""
-    return create_engine(url)
+    engine = create_engine(url)
+    if engine.dialect.name == "sqlite":
+        event.listen(engine, "connect", _enable_foreign_keys)
+    return engine
+
+
+def _enable_foreign_keys(connection: sqlite3.Connection, record: object) -> None:
+    cursor = connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 
 class SqlAlchemyDatabaseProbe:
