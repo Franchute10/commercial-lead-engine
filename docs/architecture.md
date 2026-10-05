@@ -6,7 +6,10 @@ relationships and identity; infrastructure implements storage; CLI composes depe
 
 ```mermaid
 flowchart LR
-    CLI[Typer composition root] --> APP[Application services]
+    CLI[Typer composition root] --> APP[Application services / Scout]
+    SCOUT[ScoutService] --> PROVIDER[DiscoveryProvider port]
+    CSV[CSV adapter] -. implements .-> PROVIDER
+    STATIC[Saved search fixture adapter] -. implements .-> PROVIDER
     APP --> PORTS[Repository and UnitOfWork ports]
     APP --> DOMAIN[Domain models and normalization]
     CLI --> INFRA[SQLAlchemy repositories / UnitOfWork]
@@ -25,6 +28,7 @@ erDiagram
     SOURCE ||--o{ EVIDENCE : attributes
     COMPANY ||--o{ LEAD : evaluated_as
     CAMPAIGN ||--o{ LEAD : qualifies
+    CAMPAIGN ||--o{ DISCOVERY_RUN : targets
     LEAD ||--o{ LEAD_SCORE : scored_with
     LEAD_SCORE ||--|{ SCORE_COMPONENT : explains
     SCORE_COMPONENT ||--o{ COMPONENT_EVIDENCE : cites
@@ -35,7 +39,7 @@ erDiagram
 
 Tables: `companies`, `contacts`, `sources`, `evidence`, `campaigns`, `leads`, `lead_scores`,
 `score_components`, `lead_interactions`, plus `company_identities` and `component_evidence`.
-Alembic manages an additional `alembic_version` table. All entity IDs are UUIDs.
+Revision `0002` adds `discovery_runs`; Alembic manages `alembic_version`. All entity IDs are UUIDs.
 No separate pipeline table exists: `PipelineStage` aliases `LeadStatus` to avoid conflicting states.
 
 ## Evidence and qualification
@@ -89,9 +93,9 @@ This task models states, not transition policy. Interactions track human actions
 communications or automatically changing status. READY_FOR_OUTREACH is not proof of human approval;
 a future outreach workflow must introduce and enforce its explicit approval gate.
 
-| Future module | Input | Output | Evidence obligation |
+| Capability | Input | Output | Evidence obligation |
 | --- | --- | --- | --- |
-| Scout | Industry, geography, source ports | Company candidates | Source and observation provenance |
+| Scout V1 (CSV/demo) | Query, campaign, provider | Companies, leads, run audit | Source and observation provenance |
 | WebsiteAuditor | Company website | Structured findings | URLs, timestamps, observable signals |
 | CommercialScorer | Company and findings | Versioned score/components | Rationale and evidence IDs |
 | DecisionMakerFinder | Company and public source ports | Possible people/roles | Public sources and confidence |
@@ -100,5 +104,50 @@ a future outreach workflow must introduce and enforce its explicit approval gate
 | PipelineManager | Human actions and stage changes | Pipeline history | Actor, timestamps and outcomes |
 
 A future shortlist use case selects from scores/pipeline records and retains the evidence explaining
-selection. Discovery, crawling, external APIs, AI inference, automatic outreach, LinkedIn automation
-and final user interfaces remain outside this task.
+selection. Live web discovery, crawling, external APIs, AI inference, automatic outreach, LinkedIn automation
+and final user interfaces remain outside this task. CSV and fixture discovery are now implemented.
+
+
+## Scout capability
+
+```mermaid
+flowchart TD
+    Q[Existing campaign and query context] --> P[DiscoveryProvider]
+    P --> C[Untrusted candidate DTO]
+    C --> V[Company validation and exact identity resolution]
+    V --> F{Known facts conflict?}
+    F -->|No| W[Enrich company / Source / DISCOVERY evidence / create or reuse lead]
+    W --> A[Commit business writes and run outcome atomically]
+    F -->|Yes| R[Rollback business writes]
+    V -->|Invalid or write failure| R
+    R --> E[Commit Source and rejected/conflict/error audit]
+    A --> NEXT[Next candidate]
+    E --> NEXT
+    NEXT --> FINISH[Finalize persisted run and optional CSV report]
+```
+
+Scout accepts provider-neutral DiscoveryQuery/DiscoveryCandidate DTOs. Query fields include campaign,
+country, locality, industry, text and a bounded limit. All candidate facts may be unknown except a
+usable company name at validation time. Context does not invent candidate locality. The CSV adapter
+reads UTF-8 headers and preserves original cells/line numbers. StaticDiscoveryProvider consumes local
+fixtures; it never fetches HTTP, scrapes search pages or filters by implied search relevance.
+
+Scout uses existing repository and UnitOfWork ports. One transaction handles a candidate's company,
+identity keys, lead, source, evidence and accepted audit result. Identity matches enrich missing facts;
+known differing facts cause a reported conflict and no partial enrichment. Successful observations
+always get new provenance, while companies and company/campaign leads are reused. No score is produced.
+
+DiscoveryRun is a persisted aggregate with JSON query/outcomes and derived counters. Audit JSON
+references sources/company/lead IDs; business evidence remains relational with mandatory source FKs.
+Outcome updates commit with business writes. Rejection/conflict/error sources and outcomes commit in
+a fresh transaction after rollback. Source metadata namespaces untrusted provider metadata below
+`provider_metadata` and keeps authoritative run references separate. Invalid provenance URLs are kept
+only as raw candidate data in fallback sources. Source/evidence record receipt, not verification.
+
+Migration `0002` adds a campaign-indexed discovery_runs table without rewriting `0001` or its data.
+Tests cover empty-database migration, upgrade from populated `0001`, downgrade and ORM equivalence.
+Provider failure finishes a FAILED run; abrupt process termination may leave RUNNING for manual
+inspection. There is no scheduler/resume/retry orchestration. CLI run/report commands expose the
+persisted audit trail and counts; reports never overwrite existing files.
+
+All discovery tests are local fixtures and temporary SQLite. No network client dependency is added.

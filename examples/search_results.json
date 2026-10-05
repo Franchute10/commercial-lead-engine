@@ -1,0 +1,12 @@
+[
+  {
+    "external_id": "demo-search-1",
+    "name": "Clínica Demo del Norte",
+    "website": "https://norte.example",
+    "city": "Chiclayo",
+    "country": "Peru",
+    "source_url": "https://search.example/results?q=clinicas",
+    "source_title": "Saved synthetic search result",
+    "metadata": {"demo": true, "note": "Synthetic fixture; not a real company or live search"}
+  }
+]

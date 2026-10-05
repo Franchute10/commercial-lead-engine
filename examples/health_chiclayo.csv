@@ -1,0 +1,6 @@
+name,website,legal_name,phone,email,city,region,country,address,industry,instagram_url,facebook_url,linkedin_url,source_url
+Clínica Demo del Norte,https://norte.example,,,,Chiclayo,Lambayeque,Peru,,Health,,,,
+Clínica Demo Santa Luz,,,,,Chiclayo,,Peru,,Health,,,,
+Clínica Demo del Norte,https://www.norte.example/,,,,Chiclayo,Lambayeque,Peru,,Health,,,,
+Consultorio Demo Amanecer,,,,,Chiclayo,,Peru,,,,,,
+,https://invalid.example,,,,Chiclayo,,Peru,,,,,,

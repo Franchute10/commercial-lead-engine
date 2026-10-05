@@ -20,6 +20,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from lead_engine.domain.discovery import DiscoveryStatus
 from lead_engine.domain.enums import (
     CampaignType,
     InteractionType,
@@ -208,3 +209,22 @@ class ComponentEvidenceRow(Base):
     __tablename__ = "component_evidence"
     component_id: Mapped[UUID] = mapped_column(ForeignKey("score_components.id"), primary_key=True)
     evidence_id: Mapped[UUID] = mapped_column(ForeignKey("evidence.id"), primary_key=True)
+
+
+class DiscoveryRunRow(EntityRow):
+    __tablename__ = "discovery_runs"
+    campaign_id: Mapped[UUID] = mapped_column(ForeignKey("campaigns.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(1000))
+    query: Mapped[dict[str, JsonValue]] = mapped_column(JSON)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    status: Mapped[DiscoveryStatus] = mapped_column(
+        Enum(
+            DiscoveryStatus,
+            native_enum=False,
+            create_constraint=True,
+            name="discovery_run_status",
+        )
+    )
+    outcomes: Mapped[list[dict[str, JsonValue]]] = mapped_column(JSON)
+    provider_error: Mapped[str | None] = mapped_column(String(4000), nullable=True)

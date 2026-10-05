@@ -1,16 +1,15 @@
 """Local admin CLI and adapter composition. No external communications."""
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
 
 import typer
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import SQLAlchemyError
 
 from lead_engine.application.health import check_health
 from lead_engine.application.services import LeadService
+from lead_engine.cli.common import DatabaseOption, admin_errors, transaction
+from lead_engine.cli.scout import scout_app
 from lead_engine.domain.enums import CampaignType
 from lead_engine.domain.models import Campaign, Company
 from lead_engine.infrastructure.database import (
@@ -18,7 +17,6 @@ from lead_engine.infrastructure.database import (
     SqlAlchemyDatabaseProbe,
     build_engine,
 )
-from lead_engine.infrastructure.repositories import SqlAlchemyUnitOfWork
 from lead_engine.infrastructure.schema import (
     database_revision,
     latest_revision,
@@ -31,40 +29,15 @@ app = typer.Typer(help="Local-first Commercial Lead Engine.", no_args_is_help=Tr
 db_app = typer.Typer(help="Local database administration.", no_args_is_help=True)
 company_app = typer.Typer(help="Manual company records.", no_args_is_help=True)
 campaign_app = typer.Typer(help="Campaign records.", no_args_is_help=True)
+app.add_typer(scout_app, name="scout")
 app.add_typer(db_app, name="db")
 app.add_typer(company_app, name="company")
 app.add_typer(campaign_app, name="campaign")
-DatabaseOption = Annotated[str, typer.Option("--database-url", envvar="LEAD_ENGINE_DATABASE_URL")]
 
 
 @app.callback()
 def main() -> None:
     """Evidence-based commercial research."""
-
-
-@contextmanager
-def admin_errors() -> Iterator[None]:
-    try:
-        yield
-    except (ValueError, OSError, SQLAlchemyError) as error:
-        detail = (
-            "Database operation failed; verify schema and relationships"
-            if isinstance(error, SQLAlchemyError)
-            else str(error)
-        )
-        typer.echo(f"ERROR: {detail}", err=True)
-        raise typer.Exit(code=1) from error
-
-
-@contextmanager
-def transaction(url: str) -> Iterator[SqlAlchemyUnitOfWork]:
-    with admin_errors():
-        engine = build_engine(url)
-        try:
-            with SqlAlchemyUnitOfWork(engine) as uow:
-                yield uow
-        finally:
-            engine.dispose()
 
 
 @app.command()

@@ -8,6 +8,7 @@ from sqlalchemy import Engine, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from lead_engine.domain.discovery import DiscoveryRun
 from lead_engine.domain.errors import DuplicateError, IdentityConflictError
 from lead_engine.domain.models import (
     Campaign,
@@ -27,6 +28,7 @@ from lead_engine.infrastructure.orm import (
     CompanyRow,
     ComponentEvidenceRow,
     ContactRow,
+    DiscoveryRunRow,
     EntityRow,
     EvidenceRow,
     LeadInteractionRow,
@@ -38,6 +40,7 @@ from lead_engine.infrastructure.orm import (
 
 MAPPINGS: dict[type[Entity], type[EntityRow]] = {
     Company: CompanyRow,
+    DiscoveryRun: DiscoveryRunRow,
     Contact: ContactRow,
     Source: SourceRow,
     Evidence: EvidenceRow,
@@ -89,6 +92,8 @@ class SqlAlchemyRepository:
         data = entity.model_dump(exclude={"components", "evidence_ids"})
         if isinstance(entity, Source):
             data["source_metadata"] = data.pop("metadata")
+        if isinstance(entity, DiscoveryRun):
+            data["outcomes"] = entity.model_dump(mode="json")["outcomes"]
         row = MAPPINGS[type(entity)](**data)
         self.session.add(row)
         self.session.flush()
@@ -107,6 +112,17 @@ class SqlAlchemyRepository:
         if row is None:
             raise ValueError("Cannot update missing company")
         for field, value in company.model_dump().items():
+            setattr(row, field, value)
+        self.session.flush()
+
+    def update_discovery_run(self, run: DiscoveryRun) -> None:
+        run = DiscoveryRun.model_validate(run.model_dump())
+        row = self.session.get(DiscoveryRunRow, run.id)
+        if row is None:
+            raise ValueError("Cannot update missing discovery run")
+        data = run.model_dump()
+        data["outcomes"] = run.model_dump(mode="json")["outcomes"]
+        for field, value in data.items():
             setattr(row, field, value)
         self.session.flush()
 

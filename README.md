@@ -5,7 +5,8 @@ commercial potential and its digital/customer acquisition capability. It does no
 opportunity with absence of a website. Important conclusions are stored as attributed evidence.
 
 The current version provides a typed domain, SQLite persistence, Alembic migrations, application
-services and a manual admin CLI. It performs no scraping, crawling, external API calls, AI inference,
+services, Scout CSV/demo discovery and a manual admin CLI. It performs no scraping, crawling,
+external API calls, AI inference,
 LinkedIn automation or automatic outreach. No paid service, API key, Airtable, n8n or Streamlit is required.
 Human approval remains required before outreach; interaction records only track human actions.
 
@@ -96,7 +97,8 @@ maps relational records. Callers explicitly commit a unit of work; exiting witho
 Foreign keys are enabled on every SQLite connection. A unique company/campaign pair prevents duplicate
 leads. Score evidence is a relational association with foreign keys, not an unvalidated JSON list.
 
-`db init` applies packaged Alembic migration `0001` to head and can be repeated safely. From the repo,
+`db init` applies packaged Alembic migrations to head (`0002`) and can be repeated safely.
+Revision `0001` creates the core domain; `0002` adds the discovery audit trail. From the repo,
 the equivalent migration command is:
 
 ```powershell
@@ -136,5 +138,84 @@ python -m lead_engine health
 Tests migrate temporary SQLite databases and cover domain invariants, identity conflicts,
 transaction rollback, relationships, score provenance, schema upgrade/downgrade and admin commands.
 
-Recommended next task: define a provider-independent Scout discovery port and implement a manual
-CSV import adapter with source attribution and review of duplicate/conflicting identities.
+Recommended next task: a bounded WebsiteAuditor V1 with explicit public-access rules, observable
+findings and source evidence. Keep commercial scoring and automatic outreach out of that task.
+
+
+## Scout V1: discovery without scraping
+
+ScoutService consumes DiscoveryProvider and UnitOfWorkFactory ports. Providers return untrusted
+DiscoveryCandidate DTOs; Scout validates/normalizes them as Company records, uses the existing exact
+identity service, enriches absent facts, creates attributed discovery evidence and creates/reuses a
+Lead in the selected existing Campaign. Query locality is context, never a substitute for missing
+company facts. CSV accepts minimal records; insufficient identity signals remain provisional under
+the existing deduplication policy. No business/company rules live in a search adapter.
+
+Available providers:
+
+- `csv`: UTF-8 (optional BOM), header-based manual import.
+- `static`: saved JSON search-result/demo candidates. It performs no live search or HTTP calls,
+  and does not imply search relevance. Query/industry/locality are recorded context; only the limit
+  selects a prefix of the fixture. A later live provider can implement the same port independently.
+
+There is no live public-search adapter in V1. The fixture option provides a deterministic pipeline
+without depending on authentication, CAPTCHAs or third-party search-result access.
+Both example files use synthetic companies and `.example` URLs; they are not researched leads.
+
+### CSV format
+
+A `name` header is required. Other supported headers are `external_id`, `legal_name`, `website`,
+`primary_domain`, `phone`, `email`, `address`, `city`, `region`, `country`, `industry`, `subindustry`,
+`instagram_url`, `facebook_url`, `linkedin_url`, `google_maps_url`, `source_url`, `source_title`.
+Blank optional values become unknown; unknown columns remain in raw provenance. Duplicate/blank
+headers or missing name header fail the run. Missing company names, invalid URLs and malformed
+row widths are reported per row. Malformed quoting/encoding stops the provider and marks the run
+FAILED while retaining prior committed outcomes. CSV uses commas and quoted values as needed.
+Physical starting/ending line numbers support quoted multiline cells; empty lines are skipped.
+The default import limit is 1000 (maximum 10000), and candidates beyond the limit are not processed.
+
+```powershell
+python -m lead_engine db init
+python -m lead_engine campaign add --name "Salud Chiclayo" --type HEALTH --geography Chiclayo
+python -m lead_engine scout import-csv --campaign "Salud Chiclayo" --file examples/health_chiclayo.csv --report discovery-report.csv
+python -m lead_engine scout run --campaign "Salud Chiclayo" --provider static --fixture examples/search_results.json --query "clinicas oftalmologicas" --city Chiclayo --country Peru --limit 20
+python -m lead_engine scout runs
+python -m lead_engine scout report RUN_UUID --file another-report.csv
+```
+
+Campaign accepts UUID or exact name; ambiguous names require a UUID. Each scout command supports
+`--database-url`/`LEAD_ENGINE_DATABASE_URL`. `runs` emits JSON records including summary counts.
+Report export writes a new UTF-8 CSV with one outcome per received candidate, row number, run/source,
+company/lead IDs, flags and reason. It refuses to overwrite files or the import input, and escapes
+formula-like cells for spreadsheet readers. Export failures do not undo already committed discovery;
+use `scout report` to export the stored run later.
+
+### Provenance, conflicts and transactions
+
+Each received candidate has a Source, including rejected/conflicting/failed candidates. Metadata
+records run ID, provider, candidate number, raw input and namespaced provider metadata. CSV metadata
+retains filename, absolute file path and physical row numbers; fixture metadata identifies its file
+and synthetic nature. Valid source URLs/titles and retrieval time are retained. Invalid provenance
+URLs remain in raw metadata on a fallback Source instead of bypassing source validation.
+
+Successful candidates receive DISCOVERY evidence with company/source relationships. Its confidence
+of 1 means the candidate was supplied by that source; it does **not** verify the supplied commercial
+facts. No website absence/weakness, score or decision-maker conclusion is inferred.
+Repeated observations create separate sources/evidence while reusing the company/lead.
+
+Known conflicting facts cause a CONFLICT outcome instead of silent overwrite or partial enrichment.
+Case/accent variants of names/localities and equivalent website hosts/paths are recognized; differing
+known facts are retained for review. Failed business writes roll back company changes, identities,
+source, evidence and lead together; the rejection/error audit commits separately. Good earlier rows
+remain committed. Identity/lead uniqueness constraints also protect concurrent inserts; a race is
+reported as a conflict and a later run can reuse the committed company/lead.
+
+DiscoveryRun is persisted in `discovery_runs` with campaign, provider, query, timestamps, status and
+JSON outcomes. Counts derive from the outcomes rather than duplicated counters. Each candidate's
+business data and accepted audit outcome commit together. Runs are RUNNING, COMPLETED, PARTIAL
+(rejections/conflicts/errors), or FAILED (interrupted provider/persistence). Abrupt process termination
+can leave RUNNING with the last committed outcomes; automatic resume is not implemented.
+
+CLI exit codes: 0 completed, 2 completed with conflicts/rejections, 1 failure or transaction errors.
+The sample intentionally returns 2: five candidates, three companies created, one reused, one rejected,
+three leads created and one reused. Reimport creates no new companies/leads for this sample.
