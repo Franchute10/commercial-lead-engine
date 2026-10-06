@@ -1,5 +1,6 @@
 """Typed generic persistence with explicit mapping and relational score evidence."""
 
+from datetime import datetime
 from types import TracebackType
 from typing import Self
 from uuid import UUID
@@ -25,6 +26,7 @@ from lead_engine.domain.models import (
     Source,
 )
 from lead_engine.domain.research import CommercialBrief
+from lead_engine.domain.shortlist import DailyShortlistRun, ShortlistSuppression
 from lead_engine.infrastructure.orm import (
     CampaignRow,
     CommercialBriefRow,
@@ -33,6 +35,7 @@ from lead_engine.infrastructure.orm import (
     ComponentEvidenceRow,
     ContactIdentityRow,
     ContactRow,
+    DailyShortlistRunRow,
     DecisionMakerResearchRunRow,
     DiscoveryRunRow,
     EntityRow,
@@ -41,11 +44,14 @@ from lead_engine.infrastructure.orm import (
     LeadRow,
     LeadScoreRow,
     ScoreComponentRow,
+    ShortlistSuppressionRow,
     SourceRow,
     WebsiteAuditRow,
 )
 
 MAPPINGS: dict[type[Entity], type[EntityRow]] = {
+    DailyShortlistRun: DailyShortlistRunRow,
+    ShortlistSuppression: ShortlistSuppressionRow,
     CommercialBrief: CommercialBriefRow,
     ContactIdentity: ContactIdentityRow,
     DecisionMakerResearchRun: DecisionMakerResearchRunRow,
@@ -87,12 +93,18 @@ class SqlAlchemyRepository:
                 "lead_score_id",
             }:
                 raise ValueError(f"Unsupported brief filter {field}")
+            if entity_type is DailyShortlistRun and field not in {
+                "id",
+                "generated_at",
+                "policy_version",
+            }:
+                raise ValueError(f"Unsupported shortlist run filter {field}")
             query = query.where(getattr(row_type, field) == value)
         query = query.order_by(row_type.id)
         return [self._to_entity(entity_type, row) for row in self.session.scalars(query)]
 
     def _to_entity[T: Entity](self, entity_type: type[T], row: EntityRow) -> T:
-        if isinstance(row, CommercialBriefRow):
+        if isinstance(row, (CommercialBriefRow, DailyShortlistRunRow)):
             return entity_type.model_validate(row.payload)
         data = {
             field: getattr(row, "source_metadata" if field == "metadata" else field)
@@ -112,6 +124,17 @@ class SqlAlchemyRepository:
         return entity_type.model_validate(data)
 
     def add(self, entity: Entity) -> None:
+        if isinstance(entity, DailyShortlistRun):
+            self.session.add(
+                DailyShortlistRunRow(
+                    id=entity.id,
+                    generated_at=entity.generated_at,
+                    policy_version=entity.policy_version,
+                    payload=entity.model_dump(mode="json"),
+                )
+            )
+            self.session.flush()
+            return
         if isinstance(entity, CommercialBrief):
             self.session.add(
                 CommercialBriefRow(
@@ -144,6 +167,17 @@ class SqlAlchemyRepository:
                     ComponentEvidenceRow(component_id=entity.id, evidence_id=evidence_id)
                 )
             self.session.flush()
+
+    def revoke_shortlist_suppression(self, suppression_id: UUID, revoked_at: datetime) -> None:
+        row = self.session.get(ShortlistSuppressionRow, suppression_id)
+        if row is None:
+            raise ValueError("Suppression not found")
+        record = self._to_entity(ShortlistSuppression, row)
+        validated = ShortlistSuppression.model_validate(
+            {**record.model_dump(), "revoked_at": revoked_at}
+        )
+        row.revoked_at = validated.revoked_at
+        self.session.flush()
 
     def update_company(self, company: Company) -> None:
         row = self.session.get(CompanyRow, company.id)

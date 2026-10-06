@@ -314,6 +314,8 @@ def test_schema_tables_and_foreign_keys(engine: Engine) -> None:
         "discovery_runs",
         "website_audits",
         "commercial_briefs",
+        "daily_shortlist_runs",
+        "shortlist_suppressions",
         "contact_identities",
         "decision_maker_research_runs",
     }

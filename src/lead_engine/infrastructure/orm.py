@@ -291,3 +291,25 @@ class CommercialBriefRow(EntityRow):
     research_version: Mapped[str] = mapped_column(String(1000))
     lead_score_id: Mapped[UUID | None] = mapped_column(ForeignKey("lead_scores.id"), nullable=True)
     payload: Mapped[dict[str, JsonValue]] = mapped_column(JSON)
+
+
+class DailyShortlistRunRow(EntityRow):
+    __tablename__ = "daily_shortlist_runs"
+    generated_at: Mapped[datetime] = mapped_column(UTCDateTime(), index=True)
+    policy_version: Mapped[str] = mapped_column(String(1000))
+    payload: Mapped[dict[str, JsonValue]] = mapped_column(JSON)
+
+
+class ShortlistSuppressionRow(EntityRow):
+    __tablename__ = "shortlist_suppressions"
+    lead_id: Mapped[UUID] = mapped_column(ForeignKey("leads.id"), index=True)
+    starts_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    reason: Mapped[str] = mapped_column(String(1000))
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    __table_args__ = (
+        CheckConstraint("expires_at > starts_at", name="ck_shortlist_suppression_interval"),
+        CheckConstraint(
+            "revoked_at IS NULL OR revoked_at >= starts_at", name="ck_shortlist_suppression_revoked"
+        ),
+    )

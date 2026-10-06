@@ -2,17 +2,20 @@
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from enum import StrEnum
 from typing import Annotated
 from uuid import UUID
 
 import typer
 
 from lead_engine.application.contact_research import DecisionMakerResearchService
+from lead_engine.application.services import LeadService
 from lead_engine.cli.common import DatabaseOption, admin_errors, transaction
 from lead_engine.cli.scout import resolve_campaign
 from lead_engine.domain.contact_research import ContactCandidate, DecisionMakerResearchRun
 from lead_engine.domain.enums import RoleCategory, SourceType
-from lead_engine.domain.models import Contact, Lead
+from lead_engine.domain.identity import normalize_url
+from lead_engine.domain.models import Contact, Evidence, Lead, Source, utc_now
 from lead_engine.infrastructure.contact_providers import (
     CompanyWebsiteContactProvider,
     ManualContactProvider,
@@ -162,3 +165,50 @@ def recommend(
                     typer.echo(
                         research.recommend_contacts(identity, limit).model_dump_json(indent=2)
                     )
+
+
+class PublicContactChannel(StrEnum):
+    WHATSAPP = "WHATSAPP"
+    WEBSITE_CONTACT_FORM = "WEBSITE_CONTACT_FORM"
+
+
+@contact_app.command("channel-add")
+def add_public_channel(
+    contact_id: Annotated[UUID, typer.Option()],
+    channel_type: Annotated[PublicContactChannel, typer.Option("--type")],
+    value: Annotated[str, typer.Option()],
+    source_url: Annotated[str, typer.Option()],
+    business_facing: bool = False,
+    confidence: float = 0.9,
+    database_url: DatabaseOption = DEFAULT_DATABASE_URL,
+) -> None:
+    """Record an explicitly published channel; never infer one from a phone number."""
+    with transaction(database_url) as uow:
+        contact = uow.repository.get(Contact, contact_id)
+        if contact is None:
+            raise ValueError("Contact not found")
+        if channel_type == PublicContactChannel.WHATSAPP and not business_facing:
+            raise ValueError("WhatsApp requires explicit --business-facing confirmation")
+        published = normalize_url(value)
+        source = LeadService(uow).add_source(
+            Source(
+                source_type=SourceType.MANUAL,
+                url=source_url,
+                title="Manually attributed public contact channel",
+            )
+        )
+        evidence = LeadService(uow).add_evidence(
+            Evidence(
+                company_id=contact.company_id,
+                source_id=source.id,
+                evidence_type="CONTACT_PUBLIC_WHATSAPP"
+                if channel_type == PublicContactChannel.WHATSAPP
+                else "CONTACT_PUBLIC_CONTACT_FORM",
+                statement=published,
+                raw_value={"contact_id": str(contact.id), "business_facing": business_facing},
+                confidence=confidence,
+                observed_at=utc_now(),
+            )
+        )
+        uow.commit()
+        typer.echo(evidence.model_dump_json(indent=2))

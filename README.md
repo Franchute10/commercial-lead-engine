@@ -393,3 +393,28 @@ snapshot semantics. No LLM, new scraping, live search, automatic scoring or outb
 used. See [research analyst](docs/research-analyst.md) for exact policy, freshness, priority, completeness,
 status and export behavior. Offline acceptance yields appointment/quote/reservation opportunities;
 the low-data fixture yields NO_CLEAR_OPPORTUNITY.
+
+
+## Daily Shortlist V1
+
+The daily shortlist combines commercial potential, research readiness, supported public contact
+channels, opportunity strength, current pipeline timing and freshness into a separate 100-point
+priority. It respects recorded outreach cooldowns and temporary manual suppressions. Closed leads
+never appear; excluded decisions remain explainable in saved run history. No action is executed.
+
+```powershell
+python -m lead_engine db init
+python -m lead_engine shortlist today --limit 5
+python -m lead_engine shortlist today --type HEALTH --min-score 70
+python -m lead_engine shortlist explain --lead-id LEAD_UUID
+python -m lead_engine shortlist history --format json
+python -m lead_engine shortlist suppress --lead-id LEAD_UUID --days 14 --reason "Waiting for referral"
+python -m lead_engine shortlist unsuppress --lead-id LEAD_UUID
+python -m lead_engine shortlist today --format markdown --output daily-shortlist.md
+python -m examples.shortlist_fixture_demo
+```
+
+Migration 0006 adds shortlist history and suppression records. Console, Markdown, JSON and CSV are
+available. See [daily shortlist](docs/daily-shortlist.md) for weights, exact cooldowns, freshness,
+filters, channel provenance, configurable settings, action rules and offline acceptance results.
+No live research, LLM, automatic LinkedIn/email/WhatsApp activity or paid service is introduced.

@@ -1,6 +1,6 @@
 """Contact research transactions; providers run outside write transactions."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from lead_engine.application.discovery import UnitOfWorkFactory
@@ -223,10 +223,12 @@ class DecisionMakerResearchService:
             uow.commit()
         return run
 
-    def recommend_contacts(self, lead_id: UUID, limit: int = 3) -> RecommendationResult:
+    def recommend_contacts(
+        self, lead_id: UUID, limit: int = 3, as_of: datetime | None = None
+    ) -> RecommendationResult:
         if not 1 <= limit <= 100:
             raise ValueError("Limit must be 1–100")
-        now = utc_now()
+        now = as_of or utc_now()
         with self.factory() as uow:
             repo = uow.repository
             lead = repo.get(Lead, lead_id)
@@ -247,7 +249,7 @@ class DecisionMakerResearchService:
                         and e.raw_value.get("contact_id") == str(contact.id)
                     ):
                         c = ContactCandidate.model_validate(e.raw_value["candidate"])
-                        if is_supported(c, company):
+                        if e.created_at <= now and is_supported(c, company, now):
                             observations.append((e, c))
                 if not observations:
                     continue

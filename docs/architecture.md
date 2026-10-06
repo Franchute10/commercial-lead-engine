@@ -279,3 +279,29 @@ select evidenced opportunities, expose unknowns and compute independent research
 Application validates identity/version/score/provenance before committing; infrastructure stores
 indexed relational headers and a typed JSON snapshot. Migration 0005 is additive and portable.
 Historical exports do not rerun rules. Full thresholds and templates are in research-analyst.md.
+
+
+## Daily Shortlist V1
+
+```mermaid
+flowchart TD
+    CLI[Shortlist CLI] --> Service[DailyShortlistService]
+    Service --> Repository[Repository / UnitOfWork ports]
+    Repository --> Current[(Current Lead / Campaign / Score / Brief / Audit / Evidence / Interactions)]
+    Service --> Finder[Stored DecisionMakerFinder recommendations at run cutoff]
+    Service --> Policy[Versioned ShortlistPolicy]
+    Policy --> Dimensions[Potential / Research / Contact / Opportunity / Timing / Freshness]
+    Policy --> Suppress[Closed stages / Cooldowns / Stale data / Manual suppression]
+    Policy --> Decisions[Selected items and explained exclusions]
+    Decisions --> Run[(Immutable DailyShortlistRun JSON snapshot)]
+    CLI --> Manual[(Temporary suppression / Revocation history)]
+    Run --> Export[Console / Markdown / CSV / JSON]
+    Decisions --> Human[Human review; recommendations only]
+```
+
+Shortlist policy reads current pipeline and interactions instead of trusting archived brief state.
+Ranking is separate from LeadScore and does not mutate scores, briefs, contacts or pipeline. One
+aware cutoff, explicit configuration, stable tie-breaks and snapshot history make runs reproducible.
+Migration 0006 adds two portable tables; suppression revocation is the only new targeted repository
+write besides inserts. No outbound execution, live discovery or scheduler is introduced. Detailed
+rules and public-channel evidence requirements are documented in daily-shortlist.md.

@@ -1,6 +1,6 @@
 """Attributable contact observations and separate, deterministic contact fit."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Literal, Protocol, Self
 from urllib.parse import urlsplit
@@ -173,7 +173,9 @@ def source_reliability(candidate: ContactCandidate, company: Company) -> int:
     }.get(candidate.source_type, 5)
 
 
-def is_supported(candidate: ContactCandidate, company: Company) -> bool:
+def is_supported(
+    candidate: ContactCandidate, company: Company, as_of: datetime | None = None
+) -> bool:
     association = candidate.company_id == company.id or (
         candidate.company_name is not None
         and normalize_name(candidate.company_name) == normalize_name(company.canonical_name)
@@ -184,7 +186,7 @@ def is_supported(candidate: ContactCandidate, company: Company) -> bool:
         and candidate.role_title
         and candidate.confidence >= 0.7
         and candidate.source_type != SourceType.GOOGLE_SEARCH
-        and candidate.observed_at <= utc_now()
+        and candidate.observed_at <= (as_of or utc_now())
     )
 
 
