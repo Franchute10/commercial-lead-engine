@@ -54,7 +54,7 @@ class DailyShortlistService:
             raise ValueError("Shortlist clock requires an aware timestamp")
         return value
 
-    def _context(self, repo: Repository, lead: Lead, as_of: datetime) -> ShortlistContext:
+    def build_context(self, repo: Repository, lead: Lead, as_of: datetime) -> ShortlistContext:
         company = repo.get(Company, lead.company_id)
         campaign = repo.get(Campaign, lead.campaign_id)
         if company is None or campaign is None:
@@ -106,7 +106,7 @@ class DailyShortlistService:
                     filters.city
                 ):
                     continue
-                context = self._context(repo, lead, as_of)
+                context = self.build_context(repo, lead, as_of)
                 decision = self.policy.evaluate(context, filters, self.settings)
                 if decision.item.lead_id != lead.id:
                     raise ValueError("Policy returned another lead")
@@ -180,7 +180,7 @@ class DailyShortlistService:
             if lead is None:
                 raise NotFoundError("Lead not found")
             return self.policy.evaluate(
-                self._context(uow.repository, lead, as_of), ShortlistFilters(), self.settings
+                self.build_context(uow.repository, lead, as_of), ShortlistFilters(), self.settings
             )
 
     def history(self, limit: int = 10) -> list[DailyShortlistRun]:

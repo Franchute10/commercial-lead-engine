@@ -313,3 +313,32 @@ class ShortlistSuppressionRow(EntityRow):
             "revoked_at IS NULL OR revoked_at >= starts_at", name="ck_shortlist_suppression_revoked"
         ),
     )
+
+
+class OutreachDraftRow(EntityRow):
+    __tablename__ = "outreach_drafts"
+    lead_id: Mapped[UUID] = mapped_column(ForeignKey("leads.id"), index=True)
+    contact_id: Mapped[UUID] = mapped_column(ForeignKey("contacts.id"))
+    commercial_brief_id: Mapped[UUID] = mapped_column(ForeignKey("commercial_briefs.id"))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), index=True)
+    payload: Mapped[dict[str, JsonValue]] = mapped_column(JSON)
+
+
+class OutreachEventRow(EntityRow):
+    __tablename__ = "outreach_events"
+    draft_id: Mapped[UUID] = mapped_column(ForeignKey("outreach_drafts.id"), index=True)
+    occurred_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    status: Mapped[str] = mapped_column(String(100))
+    reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    interaction_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("lead_interactions.id"), nullable=True
+    )
+    actor: Mapped[str] = mapped_column(String(1000))
+    sequence: Mapped[int] = mapped_column(Integer)
+    __table_args__ = (
+        UniqueConstraint("draft_id", "sequence", name="uq_outreach_event_sequence"),
+        CheckConstraint("sequence >= 1", name="ck_outreach_event_sequence"),
+        CheckConstraint(
+            "status IN ('APPROVED','REJECTED','SUPERSEDED','USED')", name="ck_outreach_event_status"
+        ),
+    )

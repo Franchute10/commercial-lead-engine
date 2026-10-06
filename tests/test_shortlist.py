@@ -402,7 +402,7 @@ def test_linkedin_acceptance_not_inferred() -> None:
             "WEBSITE_CONTACT_FORM",
             "https://business.example/contact",
             "CONTACT_PUBLIC_CONTACT_FORM",
-            NextAction.REVIEW_MANUALLY,
+            NextAction.PREPARE_CONTACT_FORM,
         ),
     ],
 )
@@ -802,7 +802,7 @@ def test_shortlist_migration_preserves_existing_briefs(database_url: str) -> Non
                 uow.repository.add(entity)
             uow.commit()
         upgrade_database(database_url)
-        assert database_revision(engine) == "0006"
+        assert database_revision(engine) == "0007"
         command.downgrade(migration_config(database_url), "0005")
         with SqlAlchemyUnitOfWork(engine) as uow:
             assert uow.repository.get(CommercialBrief, c.brief.id) == c.brief

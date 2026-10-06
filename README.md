@@ -418,3 +418,31 @@ Migration 0006 adds shortlist history and suppression records. Console, Markdown
 available. See [daily shortlist](docs/daily-shortlist.md) for weights, exact cooldowns, freshness,
 filters, channel provenance, configurable settings, action rules and offline acceptance results.
 No live research, LLM, automatic LinkedIn/email/WhatsApp activity or paid service is introduced.
+
+
+## Human-Approved Outreach Writer V1
+
+Prepare deterministic Spanish/English drafts from supported opportunities, current public contacts
+and company-wide cooldowns. Campaign, role, channel, purpose and explicit referrals shape the text.
+Every personalized observation cites stored evidence. Immutable content and human decision events
+retain history; approval never sends and USED is a human attestation. No LLM, API key, social/email
+integration, attachments or automatic outreach exists.
+
+```powershell
+python -m lead_engine db init
+python -m lead_engine outreach draft --lead-id LEAD_UUID
+python -m lead_engine outreach draft --lead-id LEAD_UUID --channel EMAIL --language en
+python -m lead_engine outreach shortlist --campaign "Salud Chiclayo" --limit 5
+python -m lead_engine outreach list --status DRAFT
+python -m lead_engine outreach show --draft-id DRAFT_UUID --format markdown --output draft.md
+python -m lead_engine outreach approve --draft-id DRAFT_UUID
+python -m lead_engine outreach reject --draft-id DRAFT_UUID --reason "Too generic"
+python -m lead_engine outreach mark-used --draft-id DRAFT_UUID
+python -m examples.outreach_fixture_demo
+```
+
+Migration 0007 adds drafts and append-only decision events. `mark-used --record-interaction` is
+an explicit optional human activity record; default mark-used creates no LeadInteraction. See
+[outreach writer](docs/outreach-writer.md) for gates, role/CTA/referral policies, centralized limits,
+CLI/export examples, immutable history and acceptance cases. Research-first and suppressed leads
+never get a fabricated outreach draft; `--force` cannot bypass their eligibility or cooldowns.

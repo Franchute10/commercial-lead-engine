@@ -25,6 +25,7 @@ from lead_engine.domain.models import (
     ScoreComponent,
     Source,
 )
+from lead_engine.domain.outreach import OutreachDraft, OutreachEvent
 from lead_engine.domain.research import CommercialBrief
 from lead_engine.domain.shortlist import DailyShortlistRun, ShortlistSuppression
 from lead_engine.infrastructure.orm import (
@@ -43,6 +44,8 @@ from lead_engine.infrastructure.orm import (
     LeadInteractionRow,
     LeadRow,
     LeadScoreRow,
+    OutreachDraftRow,
+    OutreachEventRow,
     ScoreComponentRow,
     ShortlistSuppressionRow,
     SourceRow,
@@ -50,6 +53,8 @@ from lead_engine.infrastructure.orm import (
 )
 
 MAPPINGS: dict[type[Entity], type[EntityRow]] = {
+    OutreachDraft: OutreachDraftRow,
+    OutreachEvent: OutreachEventRow,
     DailyShortlistRun: DailyShortlistRunRow,
     ShortlistSuppression: ShortlistSuppressionRow,
     CommercialBrief: CommercialBriefRow,
@@ -83,6 +88,14 @@ class SqlAlchemyRepository:
         for field, value in filters.items():
             if field not in entity_type.model_fields or field in {"components", "evidence_ids"}:
                 raise ValueError(f"Unsupported filter {field}")
+            if entity_type is OutreachDraft and field not in {
+                "id",
+                "lead_id",
+                "contact_id",
+                "commercial_brief_id",
+                "created_at",
+            }:
+                raise ValueError(f"Unsupported draft filter {field}")
             if entity_type is CommercialBrief and field not in {
                 "id",
                 "lead_id",
@@ -100,11 +113,13 @@ class SqlAlchemyRepository:
             }:
                 raise ValueError(f"Unsupported shortlist run filter {field}")
             query = query.where(getattr(row_type, field) == value)
-        query = query.order_by(row_type.id)
+        query = query.order_by(
+            OutreachEventRow.sequence if entity_type is OutreachEvent else row_type.id
+        )
         return [self._to_entity(entity_type, row) for row in self.session.scalars(query)]
 
     def _to_entity[T: Entity](self, entity_type: type[T], row: EntityRow) -> T:
-        if isinstance(row, (CommercialBriefRow, DailyShortlistRunRow)):
+        if isinstance(row, (CommercialBriefRow, DailyShortlistRunRow, OutreachDraftRow)):
             return entity_type.model_validate(row.payload)
         data = {
             field: getattr(row, "source_metadata" if field == "metadata" else field)
@@ -124,6 +139,25 @@ class SqlAlchemyRepository:
         return entity_type.model_validate(data)
 
     def add(self, entity: Entity) -> None:
+        if isinstance(entity, OutreachDraft):
+            self.session.add(
+                OutreachDraftRow(
+                    id=entity.id,
+                    lead_id=entity.lead_id,
+                    contact_id=entity.contact_id,
+                    commercial_brief_id=entity.commercial_brief_id,
+                    created_at=entity.created_at,
+                    payload=entity.model_dump(mode="json"),
+                )
+            )
+            self.session.flush()
+            return
+        if isinstance(entity, OutreachEvent):
+            # Sequence comes from the application snapshot: a stale concurrent decision
+            # must collide, never acquire a new sequence after validating an old status.
+            self.session.add(OutreachEventRow(**entity.model_dump()))
+            self.session.flush()
+            return
         if isinstance(entity, DailyShortlistRun):
             self.session.add(
                 DailyShortlistRunRow(

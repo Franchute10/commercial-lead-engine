@@ -127,7 +127,7 @@ Action precedence after suppression:
    Acceptance is never inferred from elapsed time. No repeat first invitation is recommended.
 8. CONTACTED without recorded outreach → REVIEW_MANUALLY.
 9. No recorded outreach → LinkedIn connection, email, phone call or explicit public-business WhatsApp,
-   according to the selected channel. Website forms route to REVIEW_MANUALLY.
+   according to the selected channel. Website forms route to PREPARE_CONTACT_FORM for human draft review.
 
 PREPARE_PROPOSAL is part of the action vocabulary for future pipeline integration, not assigned by
 an inferred event in V1. All actions require human review, and none has an execution adapter.
@@ -136,8 +136,9 @@ Contacts sort by fit, normalized name and contact UUID. The highest-fitting curr
 proven public channel is preferred; otherwise the highest-fitting current person is shown without
 inventing a channel. For that person, default preference is LINKEDIN, EMAIL, PHONE,
 WEBSITE_CONTACT_FORM, WHATSAPP. Multiple channels use the configured preference, then literal channel
-value as deterministic tie-break. Warm/referral paths are not structurally modeled and cannot be
-inferred from free-text notes or a suppression reason such as 'Waiting for referral'.
+value as deterministic tie-break. Outreach Writer V1 models explicit source-backed warm/referral paths and prefers them in its
+draft queue. Shortlist priority remains unchanged; referrals cannot be inferred from free-text
+notes or a suppression reason such as 'Waiting for referral'.
 
 Selected channels must match an existing Source-backed Evidence statement, company/contact UUID,
 expected evidence type, confidence >=0.7 and current dates. Current role evidence is required too.

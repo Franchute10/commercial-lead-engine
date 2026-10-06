@@ -345,6 +345,9 @@ class V1ShortlistPolicy:
                 "Explicit public business-facing WhatsApp channel; not inferred from a phone"
             ),
             NextAction.MAKE_PHONE_CALL: "Published phone channel and no recorded outbound outreach",
+            NextAction.PREPARE_CONTACT_FORM: (
+                "Published contact form and supported person; prepare company-inbox text for review"
+            ),
             NextAction.FOLLOW_UP: (
                 "Recorded outreach and expired cooldown; review follow-up manually"
             ),
@@ -547,5 +550,5 @@ class V1ShortlistPolicy:
             "EMAIL": NextAction.SEND_EMAIL,
             "PHONE": NextAction.MAKE_PHONE_CALL,
             "WHATSAPP": NextAction.SEND_WHATSAPP,
-            "WEBSITE_CONTACT_FORM": NextAction.REVIEW_MANUALLY,
+            "WEBSITE_CONTACT_FORM": NextAction.PREPARE_CONTACT_FORM,
         }.get(channel.channel_type, NextAction.REVIEW_MANUALLY)

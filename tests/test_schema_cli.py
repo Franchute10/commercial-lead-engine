@@ -25,13 +25,13 @@ def test_migration_empty_database_and_idempotent_upgrade(database_url: str) -> N
     upgrade_database(database_url)
     engine = build_engine(database_url)
     try:
-        assert database_revision(engine) == "0006"
+        assert database_revision(engine) == "0007"
         with engine.connect() as connection:
             assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
         command.downgrade(migration_config(database_url), "base")
         assert inspect(engine).get_table_names() == ["alembic_version"]
         upgrade_database(database_url)
-        assert database_revision(engine) == "0006"
+        assert database_revision(engine) == "0007"
     finally:
         engine.dispose()
 
@@ -45,7 +45,7 @@ def test_cli_database_init_status_and_manual_records(database_url: str) -> None:
     assert runner.invoke(app, ["db", "init", *options]).exit_code == 0
     status = runner.invoke(app, ["db", "status", *options])
     assert status.exit_code == 0, status.output
-    assert "0006" in status.stdout
+    assert "0007" in status.stdout
     add = runner.invoke(
         app, ["company", "add", "--name", "Clinic", "--primary-domain", "clinic.pe", *options]
     )

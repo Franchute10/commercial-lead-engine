@@ -305,3 +305,33 @@ aware cutoff, explicit configuration, stable tie-breaks and snapshot history mak
 Migration 0006 adds two portable tables; suppression revocation is the only new targeted repository
 write besides inserts. No outbound execution, live discovery or scheduler is introduced. Detailed
 rules and public-channel evidence requirements are documented in daily-shortlist.md.
+
+
+## Human-Approved Outreach Writer V1
+
+```mermaid
+flowchart TD
+    CLI[Outreach CLI] --> Service[OutreachDraftService]
+    Service --> UOW[Repository and UnitOfWork ports]
+    UOW --> Inputs[(Current lead / brief / contacts / evidence / sources / interactions)]
+    Service --> Eligibility[Shared current ShortlistPolicy and company cooldowns]
+    Eligibility --> Policy[Closed OutreachPolicy V1]
+    Policy --> Templates[Campaign / opportunity / role / channel / purpose / referral]
+    Templates --> Quality[Claim provenance / public channels / length / duplicate validation]
+    Quality --> Drafts[(Immutable outreach_drafts)]
+    CLI --> Human[Explicit approve / reject / mark-used]
+    Human --> Events[(Append-only outreach_events)]
+    Events --> Status[Projected status and decision timestamps]
+    Human --> Optional[Explicit human activity attestation]
+    Optional --> Interactions[(LeadInteraction with draft UUID; no verified delivery)]
+    Drafts --> Export[Text / escaped Markdown / JSON for human review]
+    Status --> Export
+```
+
+Migration 0007 adds portable relational headers, immutable typed JSON content and ordered human
+events. Unique per-draft event sequences protect concurrent decisions; rollback includes optional
+activity records. Current shortlist context is shared through `build_context`, preserving freshness,
+contact fit and company-wide cooldowns. Public forms have the explicit PREPARE_CONTACT_FORM action.
+Role/authority and referral evidence remain person-specific; arbitrary source text never becomes
+message prose. No sender, network transport, LLM, API key, clipboard or scheduler is introduced.
+Detailed policy and operational limits are in outreach-writer.md.
