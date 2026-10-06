@@ -368,3 +368,28 @@ python examples/contact_fixture_demo.py
 See [contact research](docs/contact-research.md) for manual entry, exact fit rules, reliability,
 identity conflicts, 30-day freshness, source provenance and offline acceptance fixtures.
 Migration 0004 adds contact identities and research runs, preserving existing contacts and evidence.
+
+
+## Commercial Research Analyst V1
+
+Research combines stored commercial evidence, website audits, latest score and Finder recommendations
+into a versioned commercial brief. Campaign rules identify one primary and up to three secondary
+opportunities only when commercial anchors and explicit observed gaps support them. Missing facts
+remain unknown. Research completeness is separate from scoring; status, priority, contacts and
+pipeline snapshots support a future shortlist without implementing it.
+
+```powershell
+python -m lead_engine db init
+python -m lead_engine research lead --lead-id LEAD_UUID
+python -m lead_engine research show --lead-id LEAD_UUID --format markdown
+python -m lead_engine research history --lead-id LEAD_UUID --format json
+python -m lead_engine research campaign --campaign "Salud Chiclayo" --min-score 70 --limit 10 --export briefs.json
+python -m lead_engine research list --campaign "Salud Chiclayo" --format csv
+python -m examples.research_fixture_demo
+```
+
+Migration 0005 adds immutable brief history. Markdown, JSON and CSV exports preserve evidence and
+snapshot semantics. No LLM, new scraping, live search, automatic scoring or outbound messages are
+used. See [research analyst](docs/research-analyst.md) for exact policy, freshness, priority, completeness,
+status and export behavior. Offline acceptance yields appointment/quote/reservation opportunities;
+the low-data fixture yields NO_CLEAR_OPPORTUNITY.

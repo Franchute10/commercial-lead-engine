@@ -280,3 +280,14 @@ class DecisionMakerResearchRunRow(EntityRow):
             name="ck_contact_run_counts",
         ),
     )
+
+
+class CommercialBriefRow(EntityRow):
+    __tablename__ = "commercial_briefs"
+    lead_id: Mapped[UUID] = mapped_column(ForeignKey("leads.id"), index=True)
+    company_id: Mapped[UUID] = mapped_column(ForeignKey("companies.id"), index=True)
+    campaign_id: Mapped[UUID] = mapped_column(ForeignKey("campaigns.id"), index=True)
+    generated_at: Mapped[datetime] = mapped_column(UTCDateTime(), index=True)
+    research_version: Mapped[str] = mapped_column(String(1000))
+    lead_score_id: Mapped[UUID | None] = mapped_column(ForeignKey("lead_scores.id"), nullable=True)
+    payload: Mapped[dict[str, JsonValue]] = mapped_column(JSON)

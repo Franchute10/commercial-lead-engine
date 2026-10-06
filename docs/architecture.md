@@ -253,3 +253,29 @@ supported observations, expose freshness/conflict warnings, and calculate contac
 of LeadScore. Domain policy remains provider-independent. Migration 0004 is additive; existing
 Contact and score schemas remain intact. No new orchestration or outbound messaging is introduced.
 See contact-research.md for exact thresholds, role mappings and adapter limits.
+
+
+## Commercial Research Analyst V1
+
+```mermaid
+flowchart TD
+    CLI[Research CLI] --> Service[CommercialResearchService]
+    Service --> Repository[Repository and UnitOfWork ports]
+    Repository --> Stored[(Lead / Company / Evidence / Source / Audit / Score / Contact)]
+    Service --> Finder[DecisionMakerRecommendations port]
+    Finder --> Contacts[Existing DecisionMakerFinder]
+    Service --> Policy[ResearchPolicy domain port]
+    Policy --> Versions[Health / Construction / Hospitality V1 templates]
+    Versions --> Observations[Shared eligible evidence resolution]
+    Policy --> Brief[Validated CommercialBrief snapshot]
+    Brief --> History[(Append-only commercial_briefs)]
+    Brief --> Export[Markdown / JSON / CSV]
+    Brief --> Future[Future shortlist inputs; human review]
+```
+
+Research reads stored inputs and appends one immutable Source-backed brief per generation. It does
+not call network providers, generate scores, mutate pipeline state or send outreach. Domain policies
+select evidenced opportunities, expose unknowns and compute independent research completeness.
+Application validates identity/version/score/provenance before committing; infrastructure stores
+indexed relational headers and a typed JSON snapshot. Migration 0005 is additive and portable.
+Historical exports do not rerun rules. Full thresholds and templates are in research-analyst.md.

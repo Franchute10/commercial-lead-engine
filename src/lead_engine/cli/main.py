@@ -11,6 +11,7 @@ from lead_engine.application.services import LeadService
 from lead_engine.cli.audit import audit_app
 from lead_engine.cli.common import DatabaseOption, admin_errors, transaction
 from lead_engine.cli.contacts import contact_app
+from lead_engine.cli.research import research_app
 from lead_engine.cli.scoring import evidence_app, score_app
 from lead_engine.cli.scout import scout_app
 from lead_engine.domain.enums import CampaignType
@@ -32,6 +33,7 @@ app = typer.Typer(help="Local-first Commercial Lead Engine.", no_args_is_help=Tr
 db_app = typer.Typer(help="Local database administration.", no_args_is_help=True)
 company_app = typer.Typer(help="Manual company records.", no_args_is_help=True)
 campaign_app = typer.Typer(help="Campaign records.", no_args_is_help=True)
+app.add_typer(research_app, name="research")
 app.add_typer(contact_app, name="contact")
 app.add_typer(score_app, name="score")
 app.add_typer(evidence_app, name="evidence")

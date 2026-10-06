@@ -313,6 +313,7 @@ def test_schema_tables_and_foreign_keys(engine: Engine) -> None:
         "alembic_version",
         "discovery_runs",
         "website_audits",
+        "commercial_briefs",
         "contact_identities",
         "decision_maker_research_runs",
     }

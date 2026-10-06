@@ -24,8 +24,10 @@ from lead_engine.domain.models import (
     ScoreComponent,
     Source,
 )
+from lead_engine.domain.research import CommercialBrief
 from lead_engine.infrastructure.orm import (
     CampaignRow,
+    CommercialBriefRow,
     CompanyIdentityRow,
     CompanyRow,
     ComponentEvidenceRow,
@@ -44,6 +46,7 @@ from lead_engine.infrastructure.orm import (
 )
 
 MAPPINGS: dict[type[Entity], type[EntityRow]] = {
+    CommercialBrief: CommercialBriefRow,
     ContactIdentity: ContactIdentityRow,
     DecisionMakerResearchRun: DecisionMakerResearchRunRow,
     Company: CompanyRow,
@@ -74,11 +77,23 @@ class SqlAlchemyRepository:
         for field, value in filters.items():
             if field not in entity_type.model_fields or field in {"components", "evidence_ids"}:
                 raise ValueError(f"Unsupported filter {field}")
+            if entity_type is CommercialBrief and field not in {
+                "id",
+                "lead_id",
+                "company_id",
+                "campaign_id",
+                "generated_at",
+                "research_version",
+                "lead_score_id",
+            }:
+                raise ValueError(f"Unsupported brief filter {field}")
             query = query.where(getattr(row_type, field) == value)
         query = query.order_by(row_type.id)
         return [self._to_entity(entity_type, row) for row in self.session.scalars(query)]
 
     def _to_entity[T: Entity](self, entity_type: type[T], row: EntityRow) -> T:
+        if isinstance(row, CommercialBriefRow):
+            return entity_type.model_validate(row.payload)
         data = {
             field: getattr(row, "source_metadata" if field == "metadata" else field)
             for field in entity_type.model_fields
@@ -97,6 +112,21 @@ class SqlAlchemyRepository:
         return entity_type.model_validate(data)
 
     def add(self, entity: Entity) -> None:
+        if isinstance(entity, CommercialBrief):
+            self.session.add(
+                CommercialBriefRow(
+                    id=entity.id,
+                    lead_id=entity.lead_id,
+                    company_id=entity.company_id,
+                    campaign_id=entity.campaign_id,
+                    generated_at=entity.generated_at,
+                    research_version=entity.research_version,
+                    lead_score_id=entity.lead_score_id,
+                    payload=entity.model_dump(mode="json"),
+                )
+            )
+            self.session.flush()
+            return
         data = entity.model_dump(exclude={"components", "evidence_ids"})
         if isinstance(entity, Source):
             data["source_metadata"] = data.pop("metadata")
