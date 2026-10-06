@@ -1,7 +1,7 @@
 """Bounded anonymous GET retrieval with robots policy and manual guarded redirects."""
 
 from time import monotonic, sleep
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
 
 import httpx
@@ -21,7 +21,9 @@ class HttpxFetcher:
         *,
         policy: PublicUrlPolicy | None = None,
         transport: httpx.BaseTransport | None = None,
+        same_domain_only: bool = False,
     ) -> None:
+        self.same_domain_only = same_domain_only
         self.settings = settings or AuditSettings()
         self.policy = policy or PublicUrlPolicy()
         self._transport = PinnedPublicTransport(self.policy, transport)
@@ -51,6 +53,10 @@ class HttpxFetcher:
     def _request(
         self, client: httpx.Client, url: str, deadline: float, *, robots: bool = False
     ) -> tuple[int, dict[str, str], str, int, float]:
+        if self.same_domain_only and urlsplit(url).hostname != self._research_host:
+            raise FetchPolicyError(
+                "EXTERNAL_DOMAIN", "Contact research stays on the company domain"
+            )
         self.policy.resolve(url)  # Validate before any request; transport revalidates and pins.
         for attempt in range(self.settings.retry_count + 1):
             self._pace(deadline)
@@ -126,6 +132,7 @@ class HttpxFetcher:
         raise FetchPolicyError("ROBOTS_REDIRECT_LIMIT", "Robots redirect limit exceeded")
 
     def fetch(self, url: str) -> FetchResult:
+        self._research_host = urlsplit(url).hostname
         current = url
         hops: list[str] = []
         status: int | None = None

@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from lead_engine.domain.audit import WebsiteAudit
+from lead_engine.domain.contact_research import ContactIdentity, DecisionMakerResearchRun
 from lead_engine.domain.discovery import DiscoveryRun
 from lead_engine.domain.errors import DuplicateError, IdentityConflictError
 from lead_engine.domain.models import (
@@ -28,7 +29,9 @@ from lead_engine.infrastructure.orm import (
     CompanyIdentityRow,
     CompanyRow,
     ComponentEvidenceRow,
+    ContactIdentityRow,
     ContactRow,
+    DecisionMakerResearchRunRow,
     DiscoveryRunRow,
     EntityRow,
     EvidenceRow,
@@ -41,6 +44,8 @@ from lead_engine.infrastructure.orm import (
 )
 
 MAPPINGS: dict[type[Entity], type[EntityRow]] = {
+    ContactIdentity: ContactIdentityRow,
+    DecisionMakerResearchRun: DecisionMakerResearchRunRow,
     Company: CompanyRow,
     WebsiteAudit: WebsiteAuditRow,
     DiscoveryRun: DiscoveryRunRow,

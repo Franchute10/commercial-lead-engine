@@ -346,3 +346,25 @@ See [scoring](docs/scoring.md) for weights, exact thresholds, confidence/age win
 structured decision-maker evidence, bands, readiness and full CLI examples. The offline four-lead
 acceptance produces Health 91, Construction 97, Hospitality 96 and sparse control 0; rescoring keeps
 both history records. No scraping, AI inference, subjective design assessment or outreach is added.
+
+
+## Decision Maker Finder V1
+
+Contact research stores attributed public role observations, preserves identity/history, and ranks
+people using campaign-specific contact fit independent of LeadScore. Manual import and bounded
+company website providers are available. Search is a typed port with a static fixture adapter.
+Every supported recommendation cites evidence; no supported person returns role targets.
+Human review is required before outreach. No LinkedIn automation, guessed channels, LLM or paid API.
+
+```powershell
+python -m lead_engine db init
+python -m lead_engine contact --help
+python -m lead_engine contact research --lead-id LEAD_UUID
+python -m lead_engine contact recommend --lead-id LEAD_UUID
+python -m lead_engine contact research-campaign --campaign "Salud Chiclayo" --min-lead-score 70
+python examples/contact_fixture_demo.py
+```
+
+See [contact research](docs/contact-research.md) for manual entry, exact fit rules, reliability,
+identity conflicts, 30-day freshness, source provenance and offline acceptance fixtures.
+Migration 0004 adds contact identities and research runs, preserving existing contacts and evidence.

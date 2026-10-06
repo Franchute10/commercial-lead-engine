@@ -228,3 +228,28 @@ Scoring and component inserts commit atomically, and scoring never changes pipel
 Campaign --min-score is a presentation filter after scoring all leads. Future versions can be registered
 without replacing historical policies/scores. The policy tables and detailed semantics are documented
 in scoring.md; readiness measures known rule-weight coverage and never rescales awarded points.
+
+
+## DecisionMakerFinder V1
+
+```mermaid
+flowchart TD
+    CLI[Contact CLI] --> Service[DecisionMakerResearchService]
+    Service --> Provider[ContactDiscoveryProvider port]
+    Provider --> Manual[ManualContactProvider]
+    Provider --> Website[CompanyWebsiteContactProvider]
+    Website --> HTTP[SSRF-safe HTTP and robots; same-domain redirects]
+    Search[PublicSearchProvider port] --> Static[Static fixture adapter]
+    Service --> Fit[Domain role fit and verification policy]
+    Service --> UOW[UnitOfWork and repository ports]
+    UOW --> SQL[SQLAlchemy adapters]
+    SQL --> Store[(Contacts / unique identities / Sources / Evidence / research runs)]
+    Service --> Output[Ranked supported people or target roles; human review]
+```
+
+Providers return untrusted typed candidates; application validates company identity and writes
+source-backed immutable observation history atomically. Recommendations resolve current roles from
+supported observations, expose freshness/conflict warnings, and calculate contact fit independently
+of LeadScore. Domain policy remains provider-independent. Migration 0004 is additive; existing
+Contact and score schemas remain intact. No new orchestration or outbound messaging is introduced.
+See contact-research.md for exact thresholds, role mappings and adapter limits.

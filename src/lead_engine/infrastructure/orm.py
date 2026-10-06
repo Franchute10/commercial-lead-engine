@@ -252,3 +252,31 @@ class WebsiteAuditRow(EntityRow):
     error_message: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     warnings: Mapped[list[str]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
+class ContactIdentityRow(EntityRow):
+    __tablename__ = "contact_identities"
+    key: Mapped[str] = mapped_column(String(1000), unique=True)
+    contact_id: Mapped[UUID] = mapped_column(ForeignKey("contacts.id"), index=True)
+
+
+class DecisionMakerResearchRunRow(EntityRow):
+    __tablename__ = "decision_maker_research_runs"
+    lead_id: Mapped[UUID | None] = mapped_column(ForeignKey("leads.id"), nullable=True)
+    company_id: Mapped[UUID] = mapped_column(ForeignKey("companies.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(1000))
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    finished_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    candidates_found: Mapped[int] = mapped_column(Integer)
+    contacts_created: Mapped[int] = mapped_column(Integer)
+    contacts_reused: Mapped[int] = mapped_column(Integer)
+    conflicts: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(100))
+    warnings: Mapped[list[str]] = mapped_column(JSON)
+    __table_args__ = (
+        CheckConstraint(
+            "candidates_found >= 0 AND contacts_created >= 0 "
+            "AND contacts_reused >= 0 AND conflicts >= 0",
+            name="ck_contact_run_counts",
+        ),
+    )
