@@ -4,6 +4,7 @@ from uuid import UUID
 
 from lead_engine.application.identity import find_duplicate, identity_keys
 from lead_engine.application.ports import UnitOfWork
+from lead_engine.domain.audit import WebsiteAudit
 from lead_engine.domain.enums import LeadStatus
 from lead_engine.domain.errors import (
     DuplicateError,
@@ -77,6 +78,10 @@ class LeadService:
         evidence = Evidence.model_validate(evidence.model_dump())
         self._require(Company, evidence.company_id)
         self._require(Source, evidence.source_id)
+        if evidence.website_audit_id:
+            audit = self._require(WebsiteAudit, evidence.website_audit_id)
+            if audit.company_id != evidence.company_id or audit.source_id != evidence.source_id:
+                raise RelationshipError("Audit evidence must match its company and source")
         self.repository.add(evidence)
         return evidence
 

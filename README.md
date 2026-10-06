@@ -5,8 +5,8 @@ commercial potential and its digital/customer acquisition capability. It does no
 opportunity with absence of a website. Important conclusions are stored as attributed evidence.
 
 The current version provides a typed domain, SQLite persistence, Alembic migrations, application
-services, Scout CSV/demo discovery and a manual admin CLI. It performs no scraping, crawling,
-external API calls, AI inference,
+services, Scout CSV/demo discovery, bounded website auditing and a manual admin CLI.
+It performs no deep crawling, external discovery API calls, AI inference,
 LinkedIn automation or automatic outreach. No paid service, API key, Airtable, n8n or Streamlit is required.
 Human approval remains required before outreach; interaction records only track human actions.
 
@@ -97,8 +97,9 @@ maps relational records. Callers explicitly commit a unit of work; exiting witho
 Foreign keys are enabled on every SQLite connection. A unique company/campaign pair prevents duplicate
 leads. Score evidence is a relational association with foreign keys, not an unvalidated JSON list.
 
-`db init` applies packaged Alembic migrations to head (`0002`) and can be repeated safely.
-Revision `0001` creates the core domain; `0002` adds the discovery audit trail. From the repo,
+`db init` applies packaged Alembic migrations to head (`0003`) and can be repeated safely.
+Revision `0001` creates the core domain; `0002` adds discovery runs; `0003` adds website audits
+and optional evidence links. From the repo,
 the equivalent migration command is:
 
 ```powershell
@@ -138,8 +139,8 @@ python -m lead_engine health
 Tests migrate temporary SQLite databases and cover domain invariants, identity conflicts,
 transaction rollback, relationships, score provenance, schema upgrade/downgrade and admin commands.
 
-Recommended next task: a bounded WebsiteAuditor V1 with explicit public-access rules, observable
-findings and source evidence. Keep commercial scoring and automatic outreach out of that task.
+Recommended next task: define a versioned, campaign-specific deterministic CommercialScorer V1
+using attributed findings and explicit scoring components. Keep human approval before outreach.
 
 
 ## Scout V1: discovery without scraping
@@ -219,3 +220,100 @@ can leave RUNNING with the last committed outcomes; automatic resume is not impl
 CLI exit codes: 0 completed, 2 completed with conflicts/rejections, 1 failure or transaction errors.
 The sample intentionally returns 2: five candidates, three companies created, one reused, one rejected,
 three leads created and one reused. Reimport creates no new companies/leads for this sample.
+
+
+## Website Auditor V1
+
+WebsiteAuditService depends on HttpFetcher, HtmlAnalyzer and UnitOfWorkFactory ports. HTTPX and
+BeautifulSoup implementations live in infrastructure. The auditor inspects only the company's
+configured website/landing URL (treated as its homepage), plus robots.txt and bounded HTTP redirects.
+It never follows discovered internal/product/service/social/booking links. No JavaScript, browser,
+Core Web Vitals, Lighthouse, commercial score, severity or subjective design evaluation is produced.
+Signals reflect the supplied static markup, not verified functionality, visibility after CSS/JS or
+conversion performance. Broken internal links are not tested in homepage-only V1.
+
+```powershell
+python -m lead_engine db init
+python -m lead_engine audit website --company-id COMPANY_UUID
+python -m lead_engine audit website --domain example.com --force
+python -m lead_engine audit campaign --campaign "Salud Chiclayo" --limit 5
+python -m lead_engine audit list
+```
+
+Specify one company UUID or an already-stored domain; these commands never create a company.
+`--database-url`/`LEAD_ENGINE_DATABASE_URL` apply as usual. JSON results include the audit, findings,
+reachability, evidence count, errors, warnings and freshness reuse. Exit codes: 0 SUCCESS/NO_WEBSITE
+or fresh reuse, 2 PARTIAL, 1 FAILED/persistence errors. A company with no stored website receives
+NO_WEBSITE, a manual Source and evidence describing that record state; it is not a business judgment.
+Campaign mode processes sequentially, deduplicates company IDs and skips records without websites.
+
+### Findings
+
+Deterministic observations cover successful HTTP reachability/status, HTTPS scheme, redirects,
+page title, meta description, h1 count/multiple h1s, viewport, tel/mailto/WhatsApp links, contact-form
+markup, ES/EN booking/quote actions, product/catalog/menu/service/privacy links, cart/checkout/purchase
+keywords, exact social platform hosts, map links and recognized reservation-provider hosts (OpenTable,
+SevenRooms, CoverManager, Resy, Calendly and Booksy). Link signals do not assert that target pages work.
+Contact forms require a textarea and a contact/email/tel signal; search-only forms are excluded.
+Known script/template/hidden markup is excluded. No external social or booking page is requested.
+
+Address elements are recorded directly; fallback street-name/number and labelled business-hour
+patterns carry confidence 0.7. Keyword/form/link rules carry confidence 0.9. Direct structural and
+HTTP observations use confidence 1. Derived contact/reservation/quote/product/service/conversion
+path findings cite their component finding types. Absence is never labelled a weakness.
+
+### Fetch and access policy
+
+AuditSettings centralizes these defaults: 10-second HTTP operation timeout, 30-second fetch budget,
+1,000,000 response bytes, at most 3 homepage redirects, one connect-timeout retry, a one-second
+minimum interval between request starts, a 3000 ms slow-response threshold, 7-day freshness and
+campaign limit 5 (maximum 100). Slow response is the final page GET elapsed time including body
+reading; it is not a browser performance score. Failed requests may have no timing. Body size counts
+read bytes. The overall budget is checked between requests/chunks; OS DNS resolution and an in-flight
+socket operation are subject to their own timeouts and may extend wall-clock duration beyond it.
+
+The honest User-Agent is `CommercialLeadEngine/0.1` with the repository URL. TLS certificates are
+verified. Environment proxies, credentials and cookies are not forwarded. HTTP errors/TLS failures/
+read failures are not retried; only an anonymous GET connect-timeout gets one paced retry. HTTP
+401/403/429 and static login/password/challenge pages are recorded as blocked access.
+
+Before each homepage origin, robots.txt is retrieved with the same public-address guards and a
+100 KB cap. 404/410 means no published policy. Robots errors/access pages fail closed. Disallow is
+respected; longer crawl-delay/request-rate directives defer the audit rather than ignoring them.
+No robots override or access-bypass CLI flag exists; --force only bypasses freshness.
+
+Streaming enforces declared and actual body caps. Accept-Encoding requests identity; unsolicited
+compressed responses are refused before decompression to avoid expansion attacks. Non-HTML content
+is PARTIAL without commercial markup inference. Invalid/malformed HTML is parsed conservatively;
+no HTML elements or parsing failure produce warnings and PARTIAL.
+
+### SSRF and freshness
+
+Only HTTP(S), ports 80/443, without embedded credentials, are accepted. Every request and redirect
+resolves all DNS answers and rejects non-global/private, loopback, link-local, reserved or multicast
+addresses, localhost/internal names, cloud metadata destinations and IPv6 transition/mapped ranges.
+Mixed public/private answers are rejected. The actual transport connects to a validated literal IP,
+retaining the original Host and TLS SNI/certificate hostname. It revalidates DNS at request time to
+prevent validation/connection rebinding. Connections are not reused across hostnames sharing an IP.
+Tests inject MockTransport and a deterministic resolver; the production CLI has no SSRF bypass.
+
+Only SUCCESS for the same company and configured website within AuditSettings.freshness_days is
+fresh. Fresh reuse creates no new evidence. `--freshness-days 0` disables reuse; `--force` requests a
+new audit while retaining historical records. PARTIAL/FAILED/NO_WEBSITE are not successful cache hits.
+Campaign limits bound newly attempted audits; fresh skips do not consume the budget.
+
+### Persistence and provenance
+
+Migration `0003` adds website_audits and nullable evidence.website_audit_id with foreign keys/indexes.
+Every audit references its company and Source. Every finding is Evidence linked directly to that
+audit and the same company/source. Source URL is the configured/attempted URL; metadata records
+requested/final URLs, HTTP status, final response timing, body size, redirects, scope, error code and
+SHA-256 of the decoded HTML text when present. Title and timestamps provide observation context.
+Full HTML is not stored; evidence values retain matched snippets/links/counts and explainable rules.
+Network access occurs outside the database transaction; Source, final audit and all Evidence commit
+atomically or roll back together. A persistence failure is reported, not mislabelled as a site finding.
+
+
+Offline acceptance is reproducible with `python examples/audit_fixture_demo.py` and documented in
+[website audit acceptance](docs/website-audit-acceptance.md). It uses MockTransport fixtures, produces
+4 audits/45 attributed evidence records, and removes its temporary database after verification.

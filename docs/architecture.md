@@ -26,6 +26,9 @@ erDiagram
     COMPANY ||--o{ COMPANY_IDENTITY : identified_by
     COMPANY ||--o{ EVIDENCE : supported_by
     SOURCE ||--o{ EVIDENCE : attributes
+    COMPANY ||--o{ WEBSITE_AUDIT : inspected_by
+    SOURCE ||--o{ WEBSITE_AUDIT : attributes
+    WEBSITE_AUDIT o|--o{ EVIDENCE : records
     COMPANY ||--o{ LEAD : evaluated_as
     CAMPAIGN ||--o{ LEAD : qualifies
     CAMPAIGN ||--o{ DISCOVERY_RUN : targets
@@ -39,7 +42,8 @@ erDiagram
 
 Tables: `companies`, `contacts`, `sources`, `evidence`, `campaigns`, `leads`, `lead_scores`,
 `score_components`, `lead_interactions`, plus `company_identities` and `component_evidence`.
-Revision `0002` adds `discovery_runs`; Alembic manages `alembic_version`. All entity IDs are UUIDs.
+Revision `0002` adds `discovery_runs`; `0003` adds `website_audits` and optional evidence audit links.
+Alembic manages `alembic_version`. All entity IDs are UUIDs.
 No separate pipeline table exists: `PipelineStage` aliases `LeadStatus` to avoid conflicting states.
 
 ## Evidence and qualification
@@ -96,7 +100,7 @@ a future outreach workflow must introduce and enforce its explicit approval gate
 | Capability | Input | Output | Evidence obligation |
 | --- | --- | --- | --- |
 | Scout V1 (CSV/demo) | Query, campaign, provider | Companies, leads, run audit | Source and observation provenance |
-| WebsiteAuditor | Company website | Structured findings | URLs, timestamps, observable signals |
+| WebsiteAuditor V1 | Configured homepage URL | Persisted audit and objective findings | Source/audit links, timestamps and matched signals |
 | CommercialScorer | Company and findings | Versioned score/components | Rationale and evidence IDs |
 | DecisionMakerFinder | Company and public source ports | Possible people/roles | Public sources and confidence |
 | ResearchAnalyst | Findings and contacts | Outreach intelligence | Attributed claims and uncertainty |
@@ -151,3 +155,48 @@ inspection. There is no scheduler/resume/retry orchestration. CLI run/report com
 persisted audit trail and counts; reports never overwrite existing files.
 
 All discovery tests are local fixtures and temporary SQLite. No network client dependency is added.
+
+
+## WebsiteAuditor V1
+
+```mermaid
+flowchart LR
+    CO[Stored company URL] --> SERVICE[WebsiteAuditService]
+    SERVICE --> FETCH[HttpFetcher port]
+    HTTP[HTTPX / public IP pinning / robots] -. implements .-> FETCH
+    SERVICE --> ANALYZE[HtmlAnalyzer port]
+    BS[BeautifulSoup / ES-EN rules] -. implements .-> ANALYZE
+    SERVICE --> UOW[UnitOfWork port]
+    UOW --> AUDIT[(WebsiteAudit / Source / Evidence)]
+```
+
+HTTP and parser objects never cross into application/domain logic. AuditSettings centralizes timeout,
+size/redirect limits, pacing, slow-response threshold and freshness. V1 retrieves the configured
+homepage URL, robots.txt and at most 3 guarded redirects; discovered links are only observed in
+markup, never visited. There is no scoring, subjective design assessment or JavaScript execution.
+
+Reachability/status, HTTPS/redirects and timing are transport observations. HTML findings record
+structure or exact ES/EN keyword/host signatures. Address/hours heuristics include lower confidence;
+higher-level path findings enumerate the observed base signals. Missing markup is not a problem.
+HTTP errors, access challenges, robots blocks and no stored URL are auditable outcomes rather than
+invented weaknesses. Non-HTML/unparseable markup yields PARTIAL with warnings.
+
+The production HTTP transport resolves all DNS addresses, rejects non-public/mixed destinations
+and pins the connection to a checked literal IP with original Host/TLS SNI and certificate validation.
+No shared TLS connections, environment proxies, credentials or cookies are used. Every redirect and
+robots request uses the same checks. Robots restrictions, longer delays/rates and access failures are
+not bypassed. Identity encoding avoids decompression expansion; body/redirect budgets constrain work.
+The total budget is checked between operations/chunks; OS DNS and current socket operation timeouts
+can extend wall-clock duration. No network is required in automated tests.
+
+Network work happens before opening the write transaction. Source, WebsiteAudit and its Evidence
+commit atomically. Evidence.website_audit_id is nullable for historical/scout evidence. The application
+requires audit evidence to match the audit's company/source. Migration `0003` adds the nullable SQLite
+REFERENCES column in place, preserving existing evidence and score associations without recreating
+referenced tables. PostgreSQL uses named foreign-key operations; backend validation remains future work.
+
+Fresh SUCCESS records for the same company/URL within 7 days are reused; --force bypasses only this
+cache. Sequential campaign mode skips no-URL companies, deduplicates companies and limits newly
+attempted audits. PARTIAL/FAILED/NO_WEBSITE remain eligible on later runs. No scheduling or automated
+outreach is introduced. CLI composition provides real HTTPX, while tests/acceptance inject transport
+fixtures without weakening the production URL policy.

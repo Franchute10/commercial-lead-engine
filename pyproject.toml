@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Local-first foundation for evidence-based commercial lead research"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["SQLAlchemy>=2.0,<3", "pydantic>=2.10,<3", "typer>=0.15,<1", "alembic>=1.14,<2"]
+dependencies = ["SQLAlchemy>=2.0,<3", "pydantic>=2.10,<3", "typer>=0.15,<1", "alembic>=1.14,<2", "httpx>=0.28,<0.29", "beautifulsoup4>=4.13,<5"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.9,<1", "mypy>=1.14,<2"]
@@ -33,7 +33,7 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "examples"]
 
 [tool.setuptools.package-data]
 lead_engine = ["infrastructure/migrations/script.py.mako"]

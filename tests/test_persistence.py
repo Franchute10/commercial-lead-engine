@@ -312,6 +312,7 @@ def test_schema_tables_and_foreign_keys(engine: Engine) -> None:
         "lead_interactions",
         "alembic_version",
         "discovery_runs",
+        "website_audits",
     }
     assert set(inspect(engine).get_table_names()) == expected
     with engine.connect() as connection:

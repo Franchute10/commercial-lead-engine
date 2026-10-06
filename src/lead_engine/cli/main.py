@@ -8,6 +8,7 @@ from sqlalchemy.engine import make_url
 
 from lead_engine.application.health import check_health
 from lead_engine.application.services import LeadService
+from lead_engine.cli.audit import audit_app
 from lead_engine.cli.common import DatabaseOption, admin_errors, transaction
 from lead_engine.cli.scout import scout_app
 from lead_engine.domain.enums import CampaignType
@@ -29,6 +30,7 @@ app = typer.Typer(help="Local-first Commercial Lead Engine.", no_args_is_help=Tr
 db_app = typer.Typer(help="Local database administration.", no_args_is_help=True)
 company_app = typer.Typer(help="Manual company records.", no_args_is_help=True)
 campaign_app = typer.Typer(help="Campaign records.", no_args_is_help=True)
+app.add_typer(audit_app, name="audit")
 app.add_typer(scout_app, name="scout")
 app.add_typer(db_app, name="db")
 app.add_typer(company_app, name="company")

@@ -20,6 +20,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from lead_engine.domain.audit import AuditStatus
 from lead_engine.domain.discovery import DiscoveryStatus
 from lead_engine.domain.enums import (
     CampaignType,
@@ -96,6 +97,9 @@ class SourceRow(EntityRow):
 
 class EvidenceRow(EntityRow):
     __tablename__ = "evidence"
+    website_audit_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("website_audits.id"), nullable=True, index=True
+    )
     __table_args__ = (
         CheckConstraint("confidence >= 0 AND confidence <= 1", name="ck_evidence_confidence"),
     )
@@ -228,3 +232,23 @@ class DiscoveryRunRow(EntityRow):
     )
     outcomes: Mapped[list[dict[str, JsonValue]]] = mapped_column(JSON)
     provider_error: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+
+
+class WebsiteAuditRow(EntityRow):
+    __tablename__ = "website_audits"
+    company_id: Mapped[UUID] = mapped_column(ForeignKey("companies.id"), index=True)
+    source_id: Mapped[UUID] = mapped_column(ForeignKey("sources.id"))
+    website_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    final_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    status: Mapped[AuditStatus] = mapped_column(
+        Enum(AuditStatus, native_enum=False, create_constraint=True, name="website_audit_status")
+    )
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    response_time_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    body_size_bytes: Mapped[int] = mapped_column(Integer)
+    error_code: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    warnings: Mapped[list[str]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime())

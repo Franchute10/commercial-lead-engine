@@ -122,6 +122,7 @@ class Source(Entity):
 
 
 class Evidence(Entity):
+    website_audit_id: UUID | None = None
     company_id: UUID
     source_id: UUID
     evidence_type: Text

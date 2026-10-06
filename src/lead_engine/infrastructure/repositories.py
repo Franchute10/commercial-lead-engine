@@ -8,6 +8,7 @@ from sqlalchemy import Engine, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from lead_engine.domain.audit import WebsiteAudit
 from lead_engine.domain.discovery import DiscoveryRun
 from lead_engine.domain.errors import DuplicateError, IdentityConflictError
 from lead_engine.domain.models import (
@@ -36,10 +37,12 @@ from lead_engine.infrastructure.orm import (
     LeadScoreRow,
     ScoreComponentRow,
     SourceRow,
+    WebsiteAuditRow,
 )
 
 MAPPINGS: dict[type[Entity], type[EntityRow]] = {
     Company: CompanyRow,
+    WebsiteAudit: WebsiteAuditRow,
     DiscoveryRun: DiscoveryRunRow,
     Contact: ContactRow,
     Source: SourceRow,
