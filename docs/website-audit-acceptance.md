@@ -29,3 +29,9 @@ limits and transaction rollback. Migration tests upgrade populated 0002 data to 
 historical evidence and score associations during upgrade/downgrade.
 
 No live public-site performance or availability is claimed by this fixture acceptance.
+
+
+LEAD-SCORE-001 adds one explicit tested-signal coverage Evidence record to each successful HTML audit.
+The historical LEAD-WEB-001 table above remains the original acceptance record. Re-running the current
+demo now yields 20/16/11/1 evidence respectively (48 total), with the same 4 audits/4 Sources and 6
+mocked requests. This additive observation lets scoring distinguish measured absence from unknown.

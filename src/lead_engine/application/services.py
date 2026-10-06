@@ -1,10 +1,16 @@
 """Validated local write operations. Caller owns the unit-of-work transaction."""
 
+import json
 from uuid import UUID
 
 from lead_engine.application.identity import find_duplicate, identity_keys
 from lead_engine.application.ports import UnitOfWork
 from lead_engine.domain.audit import WebsiteAudit
+from lead_engine.domain.commercial import (
+    BusinessSignal,
+    CommercialEvidence,
+    DecisionMakerObservation,
+)
 from lead_engine.domain.enums import LeadStatus
 from lead_engine.domain.errors import (
     DuplicateError,
@@ -76,6 +82,15 @@ class LeadService:
 
     def add_evidence(self, evidence: Evidence) -> Evidence:
         evidence = Evidence.model_validate(evidence.model_dump())
+        if evidence.evidence_type in BusinessSignal.__members__:
+            validated = CommercialEvidence.model_validate(evidence.model_dump())
+            if validated.evidence_type == BusinessSignal.DECISION_MAKER_ACCESS:
+                observation = DecisionMakerObservation.model_validate_json(
+                    json.dumps(validated.raw_value)
+                )
+                contact = self._require(Contact, observation.contact_id)
+                if contact.company_id != evidence.company_id:
+                    raise RelationshipError("Decision-maker evidence belongs to another company")
         self._require(Company, evidence.company_id)
         self._require(Source, evidence.source_id)
         if evidence.website_audit_id:

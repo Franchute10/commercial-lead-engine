@@ -173,6 +173,37 @@ class WebsiteAuditService:
                     status = AuditStatus.FAILED
                 else:
                     findings.extend(analysis.findings)
+                    if not analysis.warnings and not fetched.warnings:
+                        measured = (
+                            FindingType.MOBILE_VIEWPORT_PRESENT,
+                            FindingType.META_DESCRIPTION_PRESENT,
+                            FindingType.CONTACT_FORM_PRESENT,
+                            FindingType.WHATSAPP_LINK_PRESENT,
+                            FindingType.HAS_RESERVATION_PATH,
+                            FindingType.BOOKING_CTA_PRESENT,
+                            FindingType.HAS_QUOTE_PATH,
+                            FindingType.HAS_PRODUCT_DISCOVERY_PATH,
+                            FindingType.CATALOG_PRESENT,
+                            FindingType.HAS_DIRECT_CONTACT_PATH,
+                            FindingType.MAP_LINK_PRESENT,
+                            FindingType.BUSINESS_HOURS_PRESENT,
+                        )
+                        observed_kinds = {item.kind for item in analysis.findings}
+                        findings.append(
+                            Finding(
+                                kind=FindingType.WEBSITE_SIGNAL_COVERAGE,
+                                statement=(
+                                    "Static homepage signal checks completed; "
+                                    "not functional verification"
+                                ),
+                                value={
+                                    "version": "static-homepage-v1",
+                                    "signals": {
+                                        kind.value: kind in observed_kinds for kind in measured
+                                    },
+                                },
+                            )
+                        )
                     status = (
                         AuditStatus.PARTIAL
                         if analysis.warnings or fetched.warnings

@@ -101,7 +101,7 @@ a future outreach workflow must introduce and enforce its explicit approval gate
 | --- | --- | --- | --- |
 | Scout V1 (CSV/demo) | Query, campaign, provider | Companies, leads, run audit | Source and observation provenance |
 | WebsiteAuditor V1 | Configured homepage URL | Persisted audit and objective findings | Source/audit links, timestamps and matched signals |
-| CommercialScorer | Company and findings | Versioned score/components | Rationale and evidence IDs |
+| CommercialScorer V1 | Lead, campaign, evidence, contacts, audits | Versioned score/components and readiness | Rule explanations and evidence IDs |
 | DecisionMakerFinder | Company and public source ports | Possible people/roles | Public sources and confidence |
 | ResearchAnalyst | Findings and contacts | Outreach intelligence | Attributed claims and uncertainty |
 | OutreachWriter | Human-approved intelligence | Draft | Claim references and approval record |
@@ -200,3 +200,31 @@ cache. Sequential campaign mode skips no-URL companies, deduplicates companies a
 attempted audits. PARTIAL/FAILED/NO_WEBSITE remain eligible on later runs. No scheduling or automated
 outreach is introduced. CLI composition provides real HTTPX, while tests/acceptance inject transport
 fixtures without weakening the production URL policy.
+
+
+## CommercialScorer V1
+
+CommercialScoringService builds an immutable ScoringContext through repository/UnitOfWork ports.
+CampaignScoringPolicy is a domain protocol; immutable V1Policy/rules hold all weights and thresholds.
+Built-ins are health-v1, construction-v1 and hospitality-v1, each totaling 100. Domain policy code
+has no application/infrastructure imports and performs no HTTP, scraping, AI or subjective evaluation.
+
+Commercial evidence has an enum and strict structured-value validation. Manual observations retain
+Source IDs and timestamps. DECISION_MAKER_ACCESS must cite an existing company contact and explicit
+authority/access booleans; contact presence/name alone proves nothing. Existing LeadService validates
+these invariants for all commercial writes, not just CLI calls.
+
+Observations resolve within versioned age/confidence windows and the score's timestamp cutoff.
+UNKNOWN never implies ABSENT. Contradictory values require a strictly newer equally/higher-confidence
+observation; otherwise the subrule is uncertain and withheld. Each explanation cites considered
+observations. Opportunity rules also require an observed commercial anchor. Website negatives require
+explicit manual booleans or successful audit coverage; failed/older positive-only audits cannot invent
+absence. New audits emit WEBSITE_SIGNAL_COVERAGE without assigning business scores.
+
+LeadScore/ScoreComponents already provide immutable append-only history and relational evidence
+references. No schema migration is introduced. Structured explanation metadata retains band profile,
+weighted readiness, selected audit and calculation cutoff; historical reads do not recompute scores.
+Scoring and component inserts commit atomically, and scoring never changes pipeline states/priority.
+Campaign --min-score is a presentation filter after scoring all leads. Future versions can be registered
+without replacing historical policies/scores. The policy tables and detailed semantics are documented
+in scoring.md; readiness measures known rule-weight coverage and never rescales awarded points.

@@ -5,7 +5,7 @@ commercial potential and its digital/customer acquisition capability. It does no
 opportunity with absence of a website. Important conclusions are stored as attributed evidence.
 
 The current version provides a typed domain, SQLite persistence, Alembic migrations, application
-services, Scout CSV/demo discovery, bounded website auditing and a manual admin CLI.
+services, Scout CSV/demo discovery, bounded website auditing, commercial scoring and a manual admin CLI.
 It performs no deep crawling, external discovery API calls, AI inference,
 LinkedIn automation or automatic outreach. No paid service, API key, Airtable, n8n or Streamlit is required.
 Human approval remains required before outreach; interaction records only track human actions.
@@ -316,4 +316,33 @@ atomically or roll back together. A persistence failure is reported, not mislabe
 
 Offline acceptance is reproducible with `python examples/audit_fixture_demo.py` and documented in
 [website audit acceptance](docs/website-audit-acceptance.md). It uses MockTransport fixtures, produces
-4 audits/45 attributed evidence records, and removes its temporary database after verification.
+4 audits/48 attributed evidence records, and removes its temporary database after verification.
+
+
+## Commercial Scorer V1
+
+CommercialScoringService runs immutable `health-v1`, `construction-v1` and `hospitality-v1` policies.
+Each has exactly 100 maximum points, explicit business/opportunity rules, evidence references,
+confidence/age eligibility and deterministic explanations. The score ranks commercial opportunity;
+it is not website quality or a sales probability. Missing evidence is UNKNOWN, explicit false is
+ABSENT, unresolved contradictions are UNCERTAIN. No website alone earns no opportunity points without
+a supported commercial anchor. Scores/bands/completeness retain history and never change lead status.
+
+Successful new HTML audits also record a typed tested-signal coverage map; older audits lacking that
+map do not turn missing positive findings into false negatives. A new forced audit or an explicit
+manual observation can supply those facts. No new migration is needed: existing score/component tables
+and JSON explanation metadata store policy version, bands, completeness and observation cutoff.
+
+```powershell
+python -m lead_engine evidence add --company-id COMPANY_UUID --type GOOGLE_REVIEW_COUNT --value 427 --value-type integer --source manual
+python -m lead_engine score lead --lead-id LEAD_UUID
+python -m lead_engine score campaign --campaign "Salud Chiclayo" --min-score 70
+python -m lead_engine score explain --lead-id LEAD_UUID
+python -m lead_engine score history --lead-id LEAD_UUID
+python examples/scoring_fixture_demo.py
+```
+
+See [scoring](docs/scoring.md) for weights, exact thresholds, confidence/age windows, conflict behavior,
+structured decision-maker evidence, bands, readiness and full CLI examples. The offline four-lead
+acceptance produces Health 91, Construction 97, Hospitality 96 and sparse control 0; rescoring keeps
+both history records. No scraping, AI inference, subjective design assessment or outreach is added.
