@@ -26,6 +26,7 @@ from lead_engine.domain.models import (
     Source,
 )
 from lead_engine.domain.outreach import OutreachDraft, OutreachEvent
+from lead_engine.domain.pilot import PilotEvaluation
 from lead_engine.domain.research import CommercialBrief
 from lead_engine.domain.shortlist import DailyShortlistRun, ShortlistSuppression
 from lead_engine.infrastructure.orm import (
@@ -46,6 +47,7 @@ from lead_engine.infrastructure.orm import (
     LeadScoreRow,
     OutreachDraftRow,
     OutreachEventRow,
+    PilotEvaluationRow,
     ScoreComponentRow,
     ShortlistSuppressionRow,
     SourceRow,
@@ -53,6 +55,7 @@ from lead_engine.infrastructure.orm import (
 )
 
 MAPPINGS: dict[type[Entity], type[EntityRow]] = {
+    PilotEvaluation: PilotEvaluationRow,
     OutreachDraft: OutreachDraftRow,
     OutreachEvent: OutreachEventRow,
     DailyShortlistRun: DailyShortlistRunRow,

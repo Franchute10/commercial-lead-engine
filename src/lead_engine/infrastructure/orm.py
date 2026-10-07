@@ -342,3 +342,51 @@ class OutreachEventRow(EntityRow):
             "status IN ('APPROVED','REJECTED','SUPERSEDED','USED')", name="ck_outreach_event_status"
         ),
     )
+
+
+class PilotEvaluationRow(EntityRow):
+    __tablename__ = "pilot_evaluations"
+    lead_id: Mapped[UUID] = mapped_column(ForeignKey("leads.id"), index=True)
+    company_id: Mapped[UUID] = mapped_column(ForeignKey("companies.id"))
+    campaign_id: Mapped[UUID] = mapped_column(ForeignKey("campaigns.id"), index=True)
+    shortlist_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("daily_shortlist_runs.id"), index=True
+    )
+    evaluator: Mapped[str] = mapped_column(String(1000))
+    evaluated_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    revision: Mapped[int] = mapped_column(Integer)
+    evaluation_version: Mapped[str] = mapped_column(String(1000))
+    would_contact: Mapped[str] = mapped_column(String(100))
+    decision_maker_quality: Mapped[str] = mapped_column(String(100))
+    opportunity_quality: Mapped[str] = mapped_column(String(100))
+    outreach_quality: Mapped[str] = mapped_column(String(100))
+    evaluator_notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    score_id: Mapped[UUID | None] = mapped_column(ForeignKey("lead_scores.id"), nullable=True)
+    commercial_brief_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("commercial_briefs.id"), nullable=True
+    )
+    recommended_contact_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("contacts.id"), nullable=True
+    )
+    outreach_draft_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("outreach_drafts.id"), nullable=True
+    )
+    __table_args__ = (
+        UniqueConstraint(
+            "lead_id",
+            "shortlist_run_id",
+            "evaluator",
+            "revision",
+            name="uq_pilot_evaluation_revision",
+        ),
+        CheckConstraint("revision >= 1", name="ck_pilot_evaluation_revision"),
+        CheckConstraint("would_contact IN ('YES','NO','MAYBE')", name="ck_pilot_would_contact"),
+        CheckConstraint(
+            "decision_maker_quality IN ('GOOD','PARTIAL','WRONG','UNKNOWN')",
+            name="ck_pilot_decision_maker",
+        ),
+        CheckConstraint(
+            "opportunity_quality IN ('GOOD','PARTIAL','WRONG')", name="ck_pilot_opportunity"
+        ),
+        CheckConstraint("outreach_quality IN ('GOOD','PARTIAL','WRONG')", name="ck_pilot_outreach"),
+    )

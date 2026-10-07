@@ -446,3 +446,27 @@ an explicit optional human activity record; default mark-used creates no LeadInt
 [outreach writer](docs/outreach-writer.md) for gates, role/CTA/referral policies, centralized limits,
 CLI/export examples, immutable history and acceptance cases. Research-first and suppressed leads
 never get a fabricated outreach draft; `--force` cannot bypass their eligibility or cooldowns.
+
+
+## Real-world pilot readiness
+
+The existing workflow can now be validated against Frank's judgment without tuning rules or adding
+new discovery/CRM capabilities. Follow the exact PowerShell sequence in
+[Salud Chiclayo — Pilot 01 runbook](docs/real-world-pilot.md). The
+[company CSV template](examples/pilot_companies_template.csv) contains headers only; fill it with
+manually verified real entries. Keep inputs and generated reports in ignored `pilot_local/`.
+
+```powershell
+python -m lead_engine db init
+python -m lead_engine pilot evaluate --lead-id LEAD_UUID --shortlist-run-id RUN_UUID --would-contact YES --decision-maker GOOD --opportunity GOOD --outreach PARTIAL --notes "Actual human judgment"
+python -m lead_engine pilot report --campaign "Salud Chiclayo — Pilot 01" --shortlist-run-id RUN_UUID
+python -m lead_engine pilot report --campaign "Salud Chiclayo — Pilot 01" --shortlist-run-id RUN_UUID --format csv --output pilot_local/evaluation.csv
+python -m lead_engine pilot history --lead-id LEAD_UUID
+```
+
+Migration 0008 adds append-only pilot evaluations linked to the reviewed shortlist/score/brief/
+contact/draft. Reports isolate one run and evaluator, default Frank, use latest corrections once
+per lead, and expose exact denominators, uncertain and unevaluated cases. CSV, JSON and Markdown
+exports retain labels and review references. Feedback is separate from commercial Evidence and
+never changes scoring, pipeline, shortlist rules or outreach approval/use. Readiness is tested
+offline; this task does not claim results from a real-company campaign.

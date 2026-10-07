@@ -802,7 +802,7 @@ def test_shortlist_migration_preserves_existing_briefs(database_url: str) -> Non
                 uow.repository.add(entity)
             uow.commit()
         upgrade_database(database_url)
-        assert database_revision(engine) == "0007"
+        assert database_revision(engine) == "0008"
         command.downgrade(migration_config(database_url), "0005")
         with SqlAlchemyUnitOfWork(engine) as uow:
             assert uow.repository.get(CommercialBrief, c.brief.id) == c.brief

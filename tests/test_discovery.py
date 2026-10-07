@@ -350,7 +350,7 @@ def test_migration_from_previous_schema_preserves_companies(database_url: str) -
             company = LeadService(uow).upsert_company(Company(canonical_name="Keep me"))
             uow.commit()
         upgrade_database(database_url)
-        assert database_revision(engine) == "0007"
+        assert database_revision(engine) == "0008"
         assert "discovery_runs" in inspect(engine).get_table_names()
         with SqlAlchemyUnitOfWork(engine) as uow:
             assert uow.repository.get(Company, company.id) == company

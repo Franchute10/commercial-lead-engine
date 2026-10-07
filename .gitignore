@@ -26,3 +26,6 @@ dist/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Real-company pilot inputs, operator notes and generated reports stay local
+pilot_local/
