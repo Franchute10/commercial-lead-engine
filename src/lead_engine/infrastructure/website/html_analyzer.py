@@ -258,6 +258,9 @@ class BeautifulSoupHtmlAnalyzer:
                     "" if is_editorial_path(target.path) else quote_action + " " + target.path
                 )
             quote_action = normalize_name(quote_action)
+            discovery_action = (
+                "" if element.name == "a" and href and is_editorial_path(target.path) else action
+            )
             if has_concrete_tel_target(href):
                 add(FindingType.PHONE_LINK_PRESENT, "HTML contains a tel link", href[:1000])
             if has_concrete_mailto_target(href):
@@ -344,7 +347,12 @@ class BeautifulSoupHtmlAnalyzer:
                         "Link text/path matches a privacy keyword",
                     ),
                 ):
-                    if re.search(pattern, action):
+                    candidate = (
+                        discovery_action
+                        if kind in {FindingType.CATALOG_PRESENT, FindingType.PRODUCTS_PAGE_PRESENT}
+                        else action
+                    )
+                    if re.search(pattern, candidate):
                         add(kind, description, {"text": text[:500], "href": href[:500]}, 0.9)
         for form in soup.find_all("form"):
             # A search/login/newsletter input alone is not a contact form.

@@ -159,6 +159,63 @@ def test_quote_cta_excludes_editorial_links(markup: str, expected: bool) -> None
     assert (FindingType.HAS_QUOTE_PATH in kinds) is expected
 
 
+@pytest.mark.parametrize(
+    ("markup", "expected"),
+    [
+        ('<a href="/catalogo">Catálogo</a>', {FindingType.CATALOG_PRESENT}),
+        ('<a href="/catalog">Catalog</a>', {FindingType.CATALOG_PRESENT}),
+        ('<a href="/menu">Menú</a>', {FindingType.CATALOG_PRESENT}),
+        ('<a href="/carta">Carta</a>', {FindingType.CATALOG_PRESENT}),
+        ('<a href="/catalogo">Ver más</a>', {FindingType.CATALOG_PRESENT}),
+        ('<a href="/productos">Productos</a>', {FindingType.PRODUCTS_PAGE_PRESENT}),
+        ('<a href="/products">Products</a>', {FindingType.PRODUCTS_PAGE_PRESENT}),
+        (
+            '<a href="/productos/ladrillos">Ladrillos</a>',
+            {FindingType.PRODUCTS_PAGE_PRESENT},
+        ),
+        ('<a href="/products/bricks">Bricks</a>', {FindingType.PRODUCTS_PAGE_PRESENT}),
+        ('<a href="/products">Explore</a>', {FindingType.PRODUCTS_PAGE_PRESENT}),
+        ('<a href="/productos">Conoce más</a>', {FindingType.PRODUCTS_PAGE_PRESENT}),
+        ('<a href="/blog/catalogo-digital-2026">Continue</a>', set()),
+        ('<a href="/blog/productos-innovadores">Continue</a>', set()),
+        ('<a href="/news/nuevos-productos">Continue</a>', set()),
+        ('<a href="/article/product-strategy">Continue</a>', set()),
+        ('<a href="/articles/catalog-best-practices">Continue</a>', set()),
+        ('<a href="/insights/product-trends">Continue</a>', set()),
+        ('<a href="/posts/catalog-design">Continue</a>', set()),
+        ('<a href="/blog/guia-productos">Guía de productos</a>', set()),
+        ('<a href="/insights/tendencias-catalogo">Tendencias de catálogo</a>', set()),
+        ('<a href="/article/product-trends">Product trends</a>', set()),
+        ('<a href="/articles/catalog-guide">Catalog guide</a>', set()),
+        ('<a href="/blog/productos">Productos</a>', set()),
+        ('<a href="/article/catalog">Catalog</a>', set()),
+    ],
+)
+def test_catalog_and_product_links_exclude_editorial_content(
+    markup: str, expected: set[FindingType]
+) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(markup, "https://site.example/")
+    kinds = {item.kind for item in analysis.findings}
+    discovery_findings = {FindingType.CATALOG_PRESENT, FindingType.PRODUCTS_PAGE_PRESENT}
+    assert kinds & discovery_findings == expected
+    assert (FindingType.HAS_PRODUCT_DISCOVERY_PATH in kinds) is bool(expected)
+
+
+def test_services_booking_and_quote_signals_do_not_become_product_discovery() -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(
+        '<a href="/servicios">Servicios</a><a href="/booking">Book now</a>'
+        '<a href="/cotizar">Cotizar</a>',
+        "https://site.example/",
+    )
+    kinds = {item.kind for item in analysis.findings}
+    assert FindingType.SERVICES_PAGE_PRESENT in kinds
+    assert FindingType.BOOKING_CTA_PRESENT in kinds
+    assert FindingType.QUOTE_CTA_PRESENT in kinds
+    assert FindingType.CATALOG_PRESENT not in kinds
+    assert FindingType.PRODUCTS_PAGE_PRESENT not in kinds
+    assert FindingType.HAS_PRODUCT_DISCOVERY_PATH not in kinds
+
+
 def test_contact_and_catalog_signals() -> None:
     analyzer = BeautifulSoupHtmlAnalyzer()
     contact = analyzer.analyze(
