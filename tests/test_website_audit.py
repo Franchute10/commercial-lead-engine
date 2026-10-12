@@ -280,6 +280,56 @@ def test_contact_and_catalog_signals() -> None:
     } <= {item.kind for item in catalog.findings}
 
 
+@pytest.mark.parametrize(
+    ("form_markup", "expected"),
+    [
+        ('<form><input type="email"><textarea></textarea></form>', True),
+        ('<form><input type="tel"><textarea></textarea></form>', True),
+        ('<form id="contact"><textarea></textarea></form>', True),
+        ('<form action="/contact"><textarea></textarea></form>', True),
+        ('<form id="contacto"><textarea></textarea></form>', True),
+        ("<form><textarea></textarea><button>Cont&aacute;ctanos</button></form>", True),
+        ("<form><textarea></textarea><button>Contact us</button></form>", True),
+        ('<form action="/search"><input type="email"><textarea></textarea></form>', False),
+        ('<form action="/newsletter"><input type="email"><button>Subscribe</button></form>', False),
+        ('<form action="/subscription"><input type="email"><textarea></textarea></form>', False),
+        ('<form id="login"><input type="email"><textarea></textarea></form>', False),
+        ('<form action="/register"><input type="email"><textarea></textarea></form>', False),
+        ('<form id="signup"><input type="email"><textarea></textarea></form>', False),
+        ('<form action="/feedback"><input type="email"><textarea></textarea></form>', False),
+        ('<form id="survey"><input type="tel"><textarea></textarea></form>', False),
+        ('<form action="/review"><input type="email"><textarea></textarea></form>', False),
+        ('<form id="complaint"><input type="email"><textarea></textarea></form>', False),
+        ('<form id="reclamo"><input type="email"><textarea></textarea></form>', False),
+        ('<form id="encuesta"><input type="email"><textarea></textarea></form>', False),
+        ('<form id="opinion"><input type="email"><textarea></textarea></form>', False),
+        ('<form id="comentarios"><input type="email"><textarea></textarea></form>', False),
+        ('<form id="resena"><input type="email"><textarea></textarea></form>', False),
+        ('<form id="rese&ntilde;a"><input type="email"><textarea></textarea></form>', False),
+        ('<form id="opini&oacute;n"><input type="email"><textarea></textarea></form>', False),
+        ('<form><input type="email"></form>', False),
+        (
+            '<form id="contact" action="/feedback"><input type="email">'
+            "<textarea></textarea></form>",
+            False,
+        ),
+        ('<form id="contact"><input type="email"><textarea></textarea></form>', True),
+        ('<form id="newsletter"><input type="email"><textarea hidden></textarea></form>', False),
+        ('<form action="/booking"><input type="email"></form>', False),
+    ],
+)
+def test_contact_form_requires_message_and_commercial_context(
+    form_markup: str, expected: bool
+) -> None:
+    page_context = "<p>Contact our team</p>" if 'action="/search"' in form_markup else ""
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(
+        page_context + form_markup, "https://site.example/"
+    )
+    kinds = {item.kind for item in analysis.findings}
+    assert (FindingType.CONTACT_FORM_PRESENT in kinds) is expected
+    assert (FindingType.HAS_DIRECT_CONTACT_PATH in kinds) is expected
+
+
 def test_no_false_book_from_facebook_and_no_search_form_or_hidden_signals() -> None:
     analysis = BeautifulSoupHtmlAnalyzer().analyze(
         '<a href="https://facebook.com/demo">Facebook</a>'

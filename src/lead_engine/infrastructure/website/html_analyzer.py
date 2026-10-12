@@ -20,6 +20,11 @@ PRODUCTS = r"\b(productos|products|producto|product)\b"
 SERVICES = r"\b(servicios|services|servicio|service)\b"
 ECOMMERCE = r"\b(carrito|cart|checkout|comprar|add to cart|anadir al carrito|pagar)\b"
 PRIVACY = r"\b(privacidad|privacy|politica de privacidad)\b"
+CONTACT_FORM_EXCLUSIONS = (
+    r"\b(search|newsletter|subscribe|subscription|login|sign in|signin|register|signup|"
+    r"account|feedback|survey|review|complaint|reclamo|encuesta|opinion|comentarios|resena)\b"
+)
+CONTACT_FORM_CONTEXT = r"\b(contact|contacto|contactar|contactanos)\b"
 EDITORIAL_PATH_PREFIXES = {
     "blog",
     "blogs",
@@ -360,25 +365,25 @@ class BeautifulSoupHtmlAnalyzer:
                     if re.search(pattern, candidate):
                         add(kind, description, {"text": text[:500], "href": href[:500]}, 0.9)
         for form in soup.find_all("form"):
-            # A search/login/newsletter input alone is not a contact form.
+            # Use only this form's visible context; conflicting purposes take precedence.
             controls = form.find_all(["input", "textarea"])
             has_message = form.find("textarea") is not None
             has_contact = any(
                 str(control.get("type", "")).lower() in {"email", "tel"} for control in controls
             )
-            label = normalize_name(
+            form_context = normalize_name(
                 str(form.get("id", ""))
                 + " "
                 + str(form.get("action", ""))
                 + " "
                 + form.get_text(" ", strip=True)
             )
-            if has_message and (
-                has_contact or re.search(r"\b(contact|contacto|contactar)\b", label)
-            ):
+            has_conflicting_purpose = re.search(CONTACT_FORM_EXCLUSIONS, form_context) is not None
+            has_contact_context = re.search(CONTACT_FORM_CONTEXT, form_context) is not None
+            if has_message and not has_conflicting_purpose and (has_contact or has_contact_context):
                 add(
                     FindingType.CONTACT_FORM_PRESENT,
-                    "Form markup contains a message field and contact signal",
+                    "Form markup has a message field and commercial contact context",
                     str(form.get("action", ""))[:1000],
                     0.9,
                 )
