@@ -133,6 +133,43 @@ def test_no_false_book_from_facebook_and_no_search_form_or_hidden_signals() -> N
     )
 
 
+@pytest.mark.parametrize(
+    ("url", "platform"),
+    [
+        ("https://facebook.com/", None),
+        ("https://www.facebook.com/", None),
+        ("https://instagram.com/", None),
+        ("https://www.instagram.com/", None),
+        ("https://linkedin.com/", None),
+        ("https://www.linkedin.com/", None),
+        ("https://facebook.com/?ref=footer", None),
+        ("https://instagram.com/#footer", None),
+        ("https://facebook.com.evil.example/demo", None),
+        ("https://instagram.com.evil.example/demo", None),
+        ("https://linkedin.com.evil.example/company/demo", None),
+        ("https://facebook.com/clinica.demo", FindingType.FACEBOOK_LINK_PRESENT),
+        ("https://www.facebook.com/clinica.demo/", FindingType.FACEBOOK_LINK_PRESENT),
+        ("https://instagram.com/clinica.demo", FindingType.INSTAGRAM_LINK_PRESENT),
+        ("https://www.instagram.com/clinica.demo/", FindingType.INSTAGRAM_LINK_PRESENT),
+        ("https://linkedin.com/company/clinica-demo", FindingType.LINKEDIN_LINK_PRESENT),
+        ("https://www.linkedin.com/company/clinica-demo/", FindingType.LINKEDIN_LINK_PRESENT),
+    ],
+)
+def test_social_findings_require_concrete_resource_path(
+    url: str, platform: FindingType | None
+) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(
+        f'<a href="{url}">Social</a>', "https://site.example/"
+    )
+    social = {item.kind for item in analysis.findings} & {
+        FindingType.FACEBOOK_LINK_PRESENT,
+        FindingType.INSTAGRAM_LINK_PRESENT,
+        FindingType.LINKEDIN_LINK_PRESENT,
+        FindingType.SOCIAL_LINK_PRESENT,
+    }
+    assert social == ({platform, FindingType.SOCIAL_LINK_PRESENT} if platform else set())
+
+
 def test_audit_persistence_provenance_freshness_force_and_http(engine: Engine) -> None:
     stored = company(engine, "http://site.example/")
     fetcher = fetcher_for(
@@ -415,9 +452,9 @@ def test_truncated_html_audit_is_partial_positive_only_without_coverage(
     engine: Engine,
 ) -> None:
     prefix = (
-        b'<html><head>'
+        b"<html><head>"
         b'<meta name="viewport" content="width=device-width">'
-        b'</head><body>'
+        b"</head><body>"
         b'<a href="/book">Reservar cita</a>'
     )
     body = prefix + (b"x" * 2000)

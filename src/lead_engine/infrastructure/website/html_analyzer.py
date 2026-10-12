@@ -34,6 +34,10 @@ def is_host(host: str, domain: str) -> bool:
     return host == domain or host.endswith("." + domain)
 
 
+def is_concrete_social_link(host: str, path: str, domain: str) -> bool:
+    return is_host(host, domain) and bool(path.strip("/"))
+
+
 class BeautifulSoupHtmlAnalyzer:
     def analyze(self, html: str, page_url: str) -> HtmlAnalysis:
         soup = BeautifulSoup(html, "html.parser")
@@ -116,7 +120,11 @@ class BeautifulSoupHtmlAnalyzer:
                 ("facebook.com", FindingType.FACEBOOK_LINK_PRESENT),
                 ("linkedin.com", FindingType.LINKEDIN_LINK_PRESENT),
             ):
-                if is_host(host, domain):
+                if (
+                    href
+                    and target.scheme in {"http", "https"}
+                    and is_concrete_social_link(host, target.path, domain)
+                ):
                     add(kind, "HTML contains a link to a recognized social platform", href[:1000])
                     add(
                         FindingType.SOCIAL_LINK_PRESENT,
