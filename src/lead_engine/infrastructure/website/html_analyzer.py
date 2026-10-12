@@ -1,7 +1,7 @@
 """Deterministic ES/EN observations in supplied static HTML, never link traversal."""
 
 import re
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 from pydantic import JsonValue
@@ -36,6 +36,37 @@ def is_host(host: str, domain: str) -> bool:
 
 def is_concrete_social_link(host: str, path: str, domain: str) -> bool:
     return is_host(host, domain) and bool(path.strip("/"))
+
+
+def has_concrete_tel_target(href: str) -> bool:
+    return href.lower().startswith("tel:") and re.search(r"\d", href[4:]) is not None
+
+
+def has_concrete_mailto_target(href: str) -> bool:
+    if not href.lower().startswith("mailto:"):
+        return False
+    address = urlsplit(href).path
+    if address.count("@") != 1:
+        return False
+    local_part, domain = address.split("@")
+    return bool(local_part and domain) and not any(char.isspace() for char in address)
+
+
+def has_phone_query(query: str) -> bool:
+    return any(re.search(r"\d", phone) for phone in parse_qs(query).get("phone", []))
+
+
+def is_concrete_whatsapp_link(href: str, host: str, scheme: str, path: str, query: str) -> bool:
+    if scheme == "whatsapp":
+        target = urlsplit(href)
+        return target.netloc.lower() == "send" and has_phone_query(query)
+    if scheme not in {"http", "https"}:
+        return False
+    if is_host(host, "wa.me"):
+        return re.fullmatch(r"/\+?\d+/?", path) is not None
+    if is_host(host, "whatsapp.com"):
+        return path.rstrip("/") == "/send" and has_phone_query(query)
+    return False
 
 
 class BeautifulSoupHtmlAnalyzer:
@@ -105,15 +136,11 @@ class BeautifulSoupHtmlAnalyzer:
             target = urlsplit(urljoin(page_url, href))
             host = (target.hostname or "").lower().rstrip(".")
             action = normalize_name(text + " " + (target.path if href else ""))
-            if href.lower().startswith("tel:"):
+            if has_concrete_tel_target(href):
                 add(FindingType.PHONE_LINK_PRESENT, "HTML contains a tel link", href[:1000])
-            if href.lower().startswith("mailto:"):
+            if has_concrete_mailto_target(href):
                 add(FindingType.EMAIL_LINK_PRESENT, "HTML contains a mailto link", href[:1000])
-            if (
-                href.lower().startswith("whatsapp:")
-                or is_host(host, "wa.me")
-                or is_host(host, "whatsapp.com")
-            ):
+            if is_concrete_whatsapp_link(href, host, target.scheme, target.path, target.query):
                 add(FindingType.WHATSAPP_LINK_PRESENT, "HTML contains a WhatsApp link", href[:1000])
             for domain, kind in (
                 ("instagram.com", FindingType.INSTAGRAM_LINK_PRESENT),

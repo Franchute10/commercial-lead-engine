@@ -134,6 +134,67 @@ def test_no_false_book_from_facebook_and_no_search_form_or_hidden_signals() -> N
 
 
 @pytest.mark.parametrize(
+    ("href", "expected"),
+    [
+        ("tel:", None),
+        ("tel:+", None),
+        ("tel:   ", None),
+        ("tel:+51987654321", FindingType.PHONE_LINK_PRESENT),
+        ("tel:987654321", FindingType.PHONE_LINK_PRESENT),
+        ("tel:+1-407-555-1212", FindingType.PHONE_LINK_PRESENT),
+        ("mailto:", None),
+        ("mailto:?subject=Hello", None),
+        ("mailto:contact", None),
+        ("mailto:@example.com", None),
+        ("mailto:ventas@example.com", FindingType.EMAIL_LINK_PRESENT),
+        ("mailto:info@clinic.example?subject=Cita", FindingType.EMAIL_LINK_PRESENT),
+        ("https://wa.me/", None),
+        ("https://wa.me", None),
+        ("https://wa.me/?text=Hola", None),
+        ("https://wa.me/#footer", None),
+        ("https://www.whatsapp.com/", None),
+        ("https://whatsapp.com/", None),
+        ("https://whatsapp.com/?ref=footer", None),
+        ("https://www.whatsapp.com/#footer", None),
+        ("https://wa.me/51987654321", FindingType.WHATSAPP_LINK_PRESENT),
+        (
+            "https://api.whatsapp.com/send?phone=51987654321",
+            FindingType.WHATSAPP_LINK_PRESENT,
+        ),
+        (
+            "https://www.whatsapp.com/send?phone=51987654321",
+            FindingType.WHATSAPP_LINK_PRESENT,
+        ),
+        ("whatsapp://send?phone=51987654321", FindingType.WHATSAPP_LINK_PRESENT),
+        ("https://www.whatsapp.com/download", None),
+        ("https://www.whatsapp.com/features", None),
+        ("https://www.whatsapp.com/security", None),
+        ("https://wa.me.evil.example/51987654321", None),
+        (
+            "https://whatsapp.com.evil.example/send?phone=51987654321",
+            None,
+        ),
+    ],
+)
+def test_direct_contact_links_require_concrete_targets(
+    href: str, expected: FindingType | None
+) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(
+        f'<a href="{href}">Contact</a>', "https://site.example/"
+    )
+    direct_contact = {
+        FindingType.PHONE_LINK_PRESENT,
+        FindingType.EMAIL_LINK_PRESENT,
+        FindingType.WHATSAPP_LINK_PRESENT,
+    }
+    found = {item.kind for item in analysis.findings} & direct_contact
+    assert found == ({expected} if expected else set())
+    assert (FindingType.HAS_DIRECT_CONTACT_PATH in {item.kind for item in analysis.findings}) == (
+        expected is not None
+    )
+
+
+@pytest.mark.parametrize(
     ("url", "platform"),
     [
         ("https://facebook.com/", None),
