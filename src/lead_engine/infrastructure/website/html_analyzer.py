@@ -349,7 +349,12 @@ class BeautifulSoupHtmlAnalyzer:
                 ):
                     candidate = (
                         discovery_action
-                        if kind in {FindingType.CATALOG_PRESENT, FindingType.PRODUCTS_PAGE_PRESENT}
+                        if kind
+                        in {
+                            FindingType.CATALOG_PRESENT,
+                            FindingType.PRODUCTS_PAGE_PRESENT,
+                            FindingType.SERVICES_PAGE_PRESENT,
+                        }
                         else action
                     )
                     if re.search(pattern, candidate):

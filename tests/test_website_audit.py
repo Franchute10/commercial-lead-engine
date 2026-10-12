@@ -216,6 +216,42 @@ def test_services_booking_and_quote_signals_do_not_become_product_discovery() ->
     assert FindingType.HAS_PRODUCT_DISCOVERY_PATH not in kinds
 
 
+@pytest.mark.parametrize(
+    ("markup", "expected"),
+    [
+        ('<a href="/servicios">Servicios</a>', True),
+        ('<a href="/services">Services</a>', True),
+        ('<a href="/servicio">Servicio</a>', True),
+        ('<a href="/service">Service</a>', True),
+        ('<a href="/servicios/cirugia">Cirugía</a>', True),
+        ('<a href="/services/consulting">Consulting</a>', True),
+        ('<a href="/servicios">Ver más</a>', True),
+        ('<a href="/services">Explore</a>', True),
+        ('<a href="/blog/servicios-digitales">Continue</a>', False),
+        ('<a href="/news/nuevos-servicios">Continue</a>', False),
+        ('<a href="/article/service-design">Continue</a>', False),
+        ('<a href="/articles/services-strategy">Continue</a>', False),
+        ('<a href="/insights/service-experience">Continue</a>', False),
+        ('<a href="/posts/service-trends">Continue</a>', False),
+        ('<a href="/blog/guia-servicios">Guía de servicios</a>', False),
+        ('<a href="/insights/service-trends">Service trends</a>', False),
+        ('<a href="/articles/services-guide">Services guide</a>', False),
+        ('<a href="/blog/servicio">Cómo mejorar el servicio</a>', False),
+        ('<a href="/blog/servicios">Servicios</a>', False),
+        ('<a href="/article/services">Services</a>', False),
+        ('<a href="/productos">Productos</a>', False),
+        ('<a href="/catalogo">Catálogo</a>', False),
+        ('<a href="/booking">Book now</a>', False),
+        ('<a href="/cotizar">Cotizar</a>', False),
+    ],
+)
+def test_service_links_exclude_editorial_destinations(markup: str, expected: bool) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(markup, "https://site.example/")
+    kinds = {item.kind for item in analysis.findings}
+    assert (FindingType.SERVICES_PAGE_PRESENT in kinds) is expected
+    assert (FindingType.HAS_SERVICE_DISCOVERY_PATH in kinds) is expected
+
+
 def test_contact_and_catalog_signals() -> None:
     analyzer = BeautifulSoupHtmlAnalyzer()
     contact = analyzer.analyze(
