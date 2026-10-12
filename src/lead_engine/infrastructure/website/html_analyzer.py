@@ -29,6 +29,7 @@ PROVIDERS = (
     "booksy.com",
 )
 PROVIDER_SYSTEM_PATHS = {"about", "help", "privacy", "terms", "login", "signup", "careers"}
+MAP_SYSTEM_PATHS = {"about", "help", "privacy", "terms", "login"}
 
 
 def is_host(host: str, domain: str) -> bool:
@@ -45,6 +46,45 @@ def is_concrete_reservation_provider_link(host: str, path: str, domain: str) -> 
         return False
     first_segment = resource_path.split("/", maxsplit=1)[0].casefold()
     return first_segment not in PROVIDER_SYSTEM_PATHS
+
+
+def has_nonempty_query_value(query: str, *keys: str) -> bool:
+    parameters = parse_qs(query)
+    return any(value.strip() for key in keys for value in parameters.get(key, []))
+
+
+def is_concrete_map_link(host: str, path: str, query: str) -> bool:
+    segments = [segment.casefold() for segment in path.strip("/").split("/") if segment]
+    if not host or (segments and segments[0] in MAP_SYSTEM_PATHS):
+        return False
+    if len(segments) > 1 and segments[0] == "maps" and segments[1] in MAP_SYSTEM_PATHS:
+        return False
+
+    if is_host(host, "maps.app.goo.gl"):
+        return len(segments) == 1
+    if is_host(host, "maps.google.com"):
+        if has_nonempty_query_value(query, "q", "query"):
+            return True
+        if not segments:
+            return False
+        return segments[0] != "maps" or (len(segments) > 1 and segments[1] != "search")
+    if is_host(host, "google.com"):
+        if not segments or segments[0] != "maps":
+            return False
+        if has_nonempty_query_value(query, "q", "query"):
+            return True
+        return len(segments) > 1 and segments[1] != "search"
+    if is_host(host, "goo.gl"):
+        return len(segments) > 1 and segments[0] == "maps"
+    if is_host(host, "openstreetmap.org"):
+        if has_nonempty_query_value(query, "mlat") and has_nonempty_query_value(query, "mlon"):
+            return True
+        return (
+            len(segments) > 1
+            and segments[0] in {"node", "way", "relation"}
+            and segments[1].isdigit()
+        )
+    return False
 
 
 def has_concrete_tel_target(href: str) -> bool:
@@ -167,11 +207,9 @@ class BeautifulSoupHtmlAnalyzer:
                         "HTML links to at least one recognized social platform",
                     )
             if (
-                is_host(host, "maps.google.com")
-                or is_host(host, "maps.app.goo.gl")
-                or (is_host(host, "google.com") and target.path.startswith("/maps"))
-                or (is_host(host, "goo.gl") and target.path.startswith("/maps"))
-                or is_host(host, "openstreetmap.org")
+                href
+                and target.scheme in {"http", "https"}
+                and is_concrete_map_link(host, target.path, target.query)
             ):
                 add(
                     FindingType.MAP_LINK_PRESENT, "HTML contains a recognized map link", href[:1000]

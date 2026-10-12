@@ -253,6 +253,48 @@ def test_local_booking_cta_still_derives_reservation_path() -> None:
 
 
 @pytest.mark.parametrize(
+    ("href", "expected"),
+    [
+        ("https://maps.google.com/", False),
+        ("https://maps.app.goo.gl/", False),
+        ("https://www.google.com/maps", False),
+        ("https://www.google.com/maps/", False),
+        ("https://goo.gl/maps", False),
+        ("https://goo.gl/maps/", False),
+        ("https://www.openstreetmap.org/", False),
+        ("https://maps.google.com/?utm_source=footer", False),
+        ("https://www.google.com/maps?ref=footer", False),
+        ("https://www.openstreetmap.org/#footer", False),
+        ("https://www.google.com/maps/place/Clinica+Demo", True),
+        ("https://www.google.com/maps/search/?api=1&query=Clinica+Demo", True),
+        ("https://www.google.com/maps?query=Clinica+Demo", True),
+        ("https://maps.google.com/?q=Clinica+Demo", True),
+        ("https://maps.google.com/maps?q=Clinica+Demo", True),
+        ("https://maps.app.goo.gl/AbCdEf123456", True),
+        ("https://goo.gl/maps/AbCdEf123456", True),
+        ("https://www.openstreetmap.org/node/123456", True),
+        ("https://www.openstreetmap.org/way/123456", True),
+        ("https://www.openstreetmap.org/relation/123456", True),
+        ("https://www.openstreetmap.org/?mlat=-12.1&mlon=-77.0", True),
+        ("https://maps.google.com/about", False),
+        ("https://maps.google.com/help", False),
+        ("https://www.openstreetmap.org/privacy", False),
+        ("https://www.openstreetmap.org/login", False),
+        ("https://www.openstreetmap.org/terms", False),
+        ("https://maps.google.com.evil.example/place/demo", False),
+        ("https://google.com.evil.example/maps/place/demo", False),
+        ("https://openstreetmap.org.evil.example/node/123", False),
+    ],
+)
+def test_map_links_require_concrete_location_resources(href: str, expected: bool) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(
+        f'<a href="{href}">Map</a>', "https://site.example/"
+    )
+    kinds = {item.kind for item in analysis.findings}
+    assert (FindingType.MAP_LINK_PRESENT in kinds) is expected
+
+
+@pytest.mark.parametrize(
     ("url", "platform"),
     [
         ("https://facebook.com/", None),
