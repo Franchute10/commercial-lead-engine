@@ -319,6 +319,7 @@ def test_schema_tables_and_foreign_keys(engine: Engine) -> None:
         "outreach_drafts",
         "outreach_events",
         "pilot_evaluations",
+        "evidence_dispositions",
         "contact_identities",
         "decision_maker_research_runs",
     }

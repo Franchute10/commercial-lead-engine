@@ -6,7 +6,11 @@ from uuid import UUID
 
 from sqlalchemy import Engine
 
-from examples.scoring_fixture_demo import FixtureFetcher, create_fixtures
+from examples.scoring_fixture_demo import (
+    FixtureFetcher,
+    corroborate_conversion_gaps,
+    create_fixtures,
+)
 from lead_engine.application.auditor import WebsiteAuditService
 from lead_engine.application.contact_research import DecisionMakerResearchService
 from lead_engine.application.outreach import OutreachDraftService
@@ -26,6 +30,7 @@ from lead_engine.infrastructure.website.html_analyzer import BeautifulSoupHtmlAn
 
 def create_outreach_fixtures(engine: Engine) -> tuple[UUID, ...]:
     leads = list(create_fixtures(engine))
+    corroborate_conversion_gaps(engine, tuple(leads[:3]))
     # Distinct independent restaurant, its own identity, sources and evidence.
     with SqlAlchemyUnitOfWork(engine) as uow:
         company = Company(
@@ -61,6 +66,25 @@ def create_outreach_fixtures(engine: Engine) -> tuple[UUID, ...]:
     WebsiteAuditService(
         lambda: SqlAlchemyUnitOfWork(engine), FixtureFetcher(), BeautifulSoupHtmlAnalyzer()
     ).audit_company(company.id)
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        review = Source(
+            source_type=SourceType.MANUAL,
+            title="Synthetic independent reservation review",
+            url="https://independent.example/fixture-review",
+        )
+        uow.repository.add(review)
+        uow.repository.add(
+            Evidence(
+                company_id=company.id,
+                source_id=review.id,
+                evidence_type="HAS_RESERVATION_PATH",
+                statement="Synthetic manual review confirms no reservation path",
+                raw_value=False,
+                confidence=0.95,
+                observed_at=utc_now(),
+            )
+        )
+        uow.commit()
     leads.insert(3, independent)
     finder = DecisionMakerResearchService(lambda: SqlAlchemyUnitOfWork(engine))
     roles = (

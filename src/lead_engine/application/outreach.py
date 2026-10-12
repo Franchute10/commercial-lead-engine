@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from lead_engine.application.discovery import UnitOfWorkFactory
+from lead_engine.application.evidence_lifecycle import current_evidence
 from lead_engine.application.ports import Repository
 from lead_engine.application.shortlist import DailyShortlistService
 from lead_engine.domain.contact_research import ContactRecommendation
@@ -110,10 +111,12 @@ class OutreachDraftService:
         self, repo: Repository, ids: set[UUID], company_id: UUID, now: datetime
     ) -> tuple[EvidenceCitation, ...]:
         citations = []
+        active_ids = {item.id for item in current_evidence(repo, company_id, now)}
         for eid in sorted(ids):
             evidence = repo.get(Evidence, eid)
             if (
                 evidence is None
+                or eid not in active_ids
                 or evidence.company_id != company_id
                 or evidence.created_at > now
                 or evidence.observed_at > now
@@ -602,7 +605,7 @@ class OutreachDraftService:
         with self.factory() as uow:
             for item in actionable:
                 if item.recommended_contact_id and self._referral(
-                    tuple(uow.repository.list(Evidence, company_id=item.company_id)),
+                    current_evidence(uow.repository, item.company_id, run.generated_at),
                     item.recommended_contact_id,
                     run.generated_at,
                 ):

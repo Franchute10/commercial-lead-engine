@@ -7,11 +7,13 @@ from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import Engine, delete
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 from typer.testing import CliRunner
 
 from examples.outreach_fixture_demo import create_outreach_fixtures, run_acceptance
+from lead_engine.application.contact_research import DecisionMakerResearchService
+from lead_engine.application.evidence_lifecycle import EvidenceLifecycleService
 from lead_engine.application.outreach import OutreachDraftService
 from lead_engine.application.outreach_export import OutreachFormat, export_drafts
 from lead_engine.application.research import CommercialResearchService
@@ -20,6 +22,7 @@ from lead_engine.application.shortlist import DailyShortlistService
 from lead_engine.cli.main import app
 from lead_engine.domain.enums import InteractionType, LeadStatus, RoleCategory, SourceType
 from lead_engine.domain.errors import DuplicateError, NotFoundError
+from lead_engine.domain.evidence_lifecycle import EvidenceDispositionKind
 from lead_engine.domain.models import Evidence, Lead, LeadInteraction, Source, utc_now
 from lead_engine.domain.outreach import (
     DraftStatus,
@@ -270,10 +273,23 @@ def test_research_first_no_contact_and_roles_only(
 ) -> None:
     with pytest.raises(ValueError):
         writer.draft(ids[4])
-    with Session(engine) as session:
-        session.execute(delete(EvidenceRow).where(EvidenceRow.evidence_type == "CONTACT_ROLE"))
-        session.commit()
-    with pytest.raises(ValueError, match="FIND_DECISION_MAKER"):
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        lead = uow.repository.get(Lead, ids[0])
+        assert lead is not None
+        role = next(
+            e
+            for e in uow.repository.list(Evidence, company_id=lead.company_id)
+            if e.evidence_type == "CONTACT_ROLE"
+        )
+    EvidenceLifecycleService(lambda: SqlAlchemyUnitOfWork(engine)).dispose(
+        role.id, EvidenceDispositionKind.RETRACTED, "Fixture reviewer", "Role attribution withdrawn"
+    )
+    assert (
+        not DecisionMakerResearchService(lambda: SqlAlchemyUnitOfWork(engine))
+        .recommend_contacts(ids[0])
+        .contacts
+    )
+    with pytest.raises(ValueError, match="NO_ACTION"):
         writer.draft(ids[0])
 
 

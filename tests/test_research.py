@@ -3,6 +3,7 @@
 import csv
 import io
 import json
+from dataclasses import replace
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -40,7 +41,7 @@ from lead_engine.domain.research import (
     OpportunityType,
     ResearchContext,
 )
-from lead_engine.domain.research_policies import V1ResearchPolicy
+from lead_engine.domain.research_policies import V1ResearchPolicy, V2ResearchPolicy
 from lead_engine.domain.scoring import ScoreBand, ScoringContext
 from lead_engine.infrastructure.repositories import SqlAlchemyRepository, SqlAlchemyUnitOfWork
 
@@ -196,6 +197,84 @@ def context(
 
 def generate(c: ResearchContext) -> CommercialBrief:
     return V1ResearchPolicy(c.observations.campaign.campaign_type).generate(c)
+
+
+def test_v2_provisual_static_absence_is_partial() -> None:
+    c = context()
+    snapshot = c.observations
+    audit = snapshot.audits[0]
+    manual = tuple(e for e in snapshot.evidence if e.evidence_type != "HAS_RESERVATION_PATH")
+    coverage = Evidence(
+        company_id=snapshot.company.id,
+        source_id=audit.source_id,
+        website_audit_id=audit.id,
+        evidence_type="WEBSITE_SIGNAL_COVERAGE",
+        statement="Synthetic static homepage inspection",
+        raw_value={"version": "static-homepage-v1", "signals": {"HAS_RESERVATION_PATH": False}},
+        confidence=0.9,
+        observed_at=utc_now(),
+    )
+    director = Contact(
+        company_id=snapshot.company.id,
+        full_name="Synthetic medical director",
+        role_category=RoleCategory.MEDICAL_DIRECTOR,
+    )
+    rec = c.recommendations[0].model_copy(
+        update={"contact_id": director.id, "role_category": RoleCategory.MEDICAL_DIRECTOR}
+    )
+    c = replace(
+        c,
+        observations=replace(
+            snapshot, evidence=manual + (coverage,), contacts=(director,), as_of=utc_now()
+        ),
+        recommendations=(rec,),
+    )
+    brief = V2ResearchPolicy(CampaignType.HEALTH).generate(c)
+    assert brief.opportunity_type == OpportunityType.APPOINTMENT_CONVERSION
+    assert brief.status == BriefStatus.PARTIAL
+    assert brief.opportunity_priority == OpportunityPriority.LOW
+    assert brief.research_version == "health-research-v2"
+    assert any("Corroborate" in note for note in brief.missing_information)
+
+
+def test_v2_gmr_alternative_paths_block_customer_journey() -> None:
+    c = context(
+        overrides={
+            "HAS_DIRECT_CONTACT_PATH": False,
+            "HAS_RESERVATION_PATH": True,
+            "BOOKING_CTA_PRESENT": True,
+            "HAS_CONVERSION_CTA": True,
+        }
+    )
+    brief = V2ResearchPolicy(CampaignType.HEALTH).generate(c)
+    assert brief.opportunity_type != OpportunityType.CUSTOMER_JOURNEY
+    assert all(
+        o.opportunity_type != OpportunityType.CUSTOMER_JOURNEY
+        for o in brief.secondary_opportunities
+    )
+    assert brief.opportunity_type == OpportunityType.NO_CLEAR_OPPORTUNITY
+
+
+def test_v2_mas_vision_map_link_alone_is_not_local_discovery() -> None:
+    c = context(
+        rich=False,
+        overrides={
+            "MULTIPLE_LOCATIONS": True,
+            "MAP_LINK_PRESENT": False,
+            "ADDRESS_PRESENT": True,
+            "BUSINESS_HOURS_PRESENT": True,
+            "HAS_DIRECT_CONTACT_PATH": True,
+            "HAS_RESERVATION_PATH": True,
+            "BOOKING_CTA_PRESENT": True,
+            "CONTACT_FORM_PRESENT": True,
+            "WHATSAPP_LINK_PRESENT": True,
+        },
+    )
+    brief = V2ResearchPolicy(CampaignType.HEALTH).generate(c)
+    assert brief.opportunity_type != OpportunityType.LOCAL_DISCOVERY
+    assert all(
+        o.opportunity_type != OpportunityType.LOCAL_DISCOVERY for o in brief.secondary_opportunities
+    )
 
 
 @pytest.mark.parametrize("kind", list(CampaignType))
@@ -669,7 +748,7 @@ def test_additive_migration_preserves_core_data(database_url: str) -> None:
             uow.repository.add(c.latest_score)
             uow.commit()
         upgrade_database(database_url)
-        assert database_revision(engine) == "0008"
+        assert database_revision(engine) == "0009"
         command.downgrade(migration_config(database_url), "0004")
         with SqlAlchemyUnitOfWork(engine) as uow:
             assert uow.repository.get(LeadScore, c.latest_score.id) == c.latest_score

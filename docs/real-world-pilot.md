@@ -1,9 +1,41 @@
 # Salud Chiclayo — Pilot 01: operational runbook
 
-This pilot compares the existing engine with Frank's commercial judgment using real companies.
-It does not add discovery, change scoring policies, create a CRM, send outreach or require an
-LLM/API key. Preparation includes a header-only CSV template; no real campaign has been executed
-and no real companies are supplied by this task. Synthetic test fixtures are not pilot results.
+This pilot compares the engine with Frank's commercial judgment using real companies.
+The first reported cohort contained 16 Chiclayo health companies; its diagnostic shortlist run
+`2ad9eda8-8d13-47c1-b438-ff062697a6c3` selected three for human review. This runbook also
+supports later review rounds. Real company data stays in `pilot_local/`, outside version control.
+Synthetic test fixtures are not pilot results. No outreach is sent by these commands.
+
+## Reading the first diagnostic run after PILOT-FIX-001
+
+The existing run is a **frozen diagnostic snapshot**. For a selected or suppressed lead, use:
+
+```powershell
+python -m lead_engine shortlist explain --lead-id <LEAD_UUID> --shortlist-run-id 2ad9eda8-8d13-47c1-b438-ff062697a6c3 --format json
+```
+
+The output contains the stored policy version, filters, score, research status, opportunity,
+priority, next action and suppression reasons. It does not apply today's default minimum score.
+`shortlist explain --lead-id <LEAD_UUID>` without a run ID still evaluates the current context
+with the default minimum of 40. Runs retain full items for selected/suppressed leads. Leads
+eligible beyond a run's limit have only their UUID stored and therefore no frozen item to explain.
+
+When correcting source attribution, first add a correctly sourced replacement with `evidence add`.
+Then record one immutable disposition; supply the actual human actor and reason:
+
+```powershell
+python -m lead_engine evidence supersede --evidence-id <OLD_EVIDENCE_UUID> --replacement-evidence-id <NEW_EVIDENCE_UUID> --actor Frank --reason "Original source did not support this statement"
+python -m lead_engine evidence history --evidence-id <OLD_EVIDENCE_UUID>
+```
+
+If no replacement exists, use `evidence retract --evidence-id <UUID> --actor Frank --reason
+"..."`. A disposition leaves the original record, source and old score/brief/shortlist snapshots
+available. Rescore and regenerate the brief before a new actionable shortlist. The review chain
+is **technical signal → commercial hypothesis → research readiness → actionable outreach**.
+A static homepage absence alone is a provisional hypothesis; it does not establish a business
+problem or a ready opportunity. Diagnostic `--min-score 0` runs are for research exploration;
+the default daily/actionable shortlist still requires minimum LeadScore 40. Human evaluation
+does not automatically change weights, thresholds or approvals.
 
 ## Scope and what to review
 
@@ -37,7 +69,7 @@ python -m lead_engine campaign list
 ```
 
 `health` tests ephemeral SQLite; `db status` verifies this persisted pilot database. The new
-pilot schema head is **0008**. Every CLI respects `LEAD_ENGINE_DATABASE_URL`; keep it set for all
+pilot schema head is **0009**. Migration 0009 adds append-only evidence dispositions. Every CLI respects `LEAD_ENGINE_DATABASE_URL`; keep it set for all
 steps, or pass the same `--database-url` explicitly. Existing data is preserved by the migration.
 
 Create the campaign **once**, if the list above does not already contain it:
@@ -224,7 +256,8 @@ Keep this `$RunId` for every evaluation/report in this round. Selected rows can 
 research or identifying a person; selection alone is not permission to contact. Review `suppressed`
 reasons and the import cohort too, recording notable omitted companies in local operator notes.
 No recall/false-negative metric is claimed because non-shortlisted companies lack these labels.
-Use `shortlist explain --lead-id ACTUAL_LEAD_UUID` for a current explanation; the frozen JSON is the
+Use `shortlist explain --lead-id ACTUAL_LEAD_UUID` for a current explanation, or add
+`--shortlist-run-id "$RunId"` to explain its stored decision. The frozen JSON is the
 actual evaluated historical ordering. Its archived score, brief, contact and source references do
 not change when later enrichment or regeneration happens.
 

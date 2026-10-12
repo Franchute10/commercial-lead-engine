@@ -4,11 +4,12 @@ from collections.abc import Mapping
 from uuid import UUID
 
 from lead_engine.application.discovery import UnitOfWorkFactory
+from lead_engine.application.evidence_lifecycle import current_evidence
 from lead_engine.application.services import LeadService
 from lead_engine.domain.audit import WebsiteAudit
 from lead_engine.domain.enums import CampaignType
 from lead_engine.domain.errors import NotFoundError
-from lead_engine.domain.models import Campaign, Company, Contact, Evidence, Lead, LeadScore, utc_now
+from lead_engine.domain.models import Campaign, Company, Contact, Lead, LeadScore, utc_now
 from lead_engine.domain.policies import DEFAULT_POLICIES
 from lead_engine.domain.scoring import (
     CampaignScoringPolicy,
@@ -43,14 +44,15 @@ class CommercialScoringService:
             policy = self._policies.get(campaign.campaign_type)
             if policy is None:
                 raise ValueError("No scoring policy registered for this campaign")
+            cutoff = utc_now()
             context = ScoringContext(
                 lead=lead,
                 company=company,
                 campaign=campaign,
-                evidence=tuple(repository.list(Evidence, company_id=company.id)),
+                evidence=current_evidence(repository, company.id, cutoff),
                 contacts=tuple(repository.list(Contact, company_id=company.id)),
                 audits=tuple(repository.list(WebsiteAudit, company_id=company.id)),
-                as_of=utc_now(),
+                as_of=cutoff,
             )
             score, summary = policy.calculate(context)
             if score.lead_id != lead.id or score.scoring_version != policy.version:

@@ -9,7 +9,11 @@ from uuid import UUID, uuid4
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-from examples.scoring_fixture_demo import FixtureFetcher, create_fixtures
+from examples.scoring_fixture_demo import (
+    FixtureFetcher,
+    corroborate_conversion_gaps,
+    create_fixtures,
+)
 from lead_engine.application.auditor import WebsiteAuditService
 from lead_engine.application.contact_research import DecisionMakerResearchService
 from lead_engine.application.research import CommercialResearchService
@@ -48,6 +52,7 @@ from lead_engine.infrastructure.website.html_analyzer import BeautifulSoupHtmlAn
 
 def create_shortlist_fixtures(engine: Engine) -> tuple[UUID, ...]:
     leads = list(create_fixtures(engine))
+    corroborate_conversion_gaps(engine, tuple(leads[:3]))
     # Two synthetic health clones for timing/suppression examples, not discovery.
     with SqlAlchemyUnitOfWork(engine) as uow:
         base = leads[0]
@@ -89,6 +94,7 @@ def create_shortlist_fixtures(engine: Engine) -> tuple[UUID, ...]:
     )
     for lead in leads[4:]:
         auditor.audit_company(lead.company_id)
+    corroborate_conversion_gaps(engine, tuple(leads[4:]))
     finder = DecisionMakerResearchService(lambda: SqlAlchemyUnitOfWork(engine))
     for index, lead in enumerate(leads):
         with SqlAlchemyUnitOfWork(engine) as uow:

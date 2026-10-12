@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from lead_engine.application.discovery import UnitOfWorkFactory
+from lead_engine.application.evidence_lifecycle import current_evidence
 from lead_engine.domain.contact_research import (
     ContactCandidate,
     ContactDiscoveryProvider,
@@ -239,7 +240,7 @@ class DecisionMakerResearchService:
             if company is None or campaign is None:
                 raise NotFoundError("Lead relationships missing")
             results = []
-            evidence = repo.list(Evidence, company_id=company.id)
+            evidence = current_evidence(repo, company.id, now)
             for contact in repo.list(Contact, company_id=company.id):
                 observations = []
                 for e in evidence:

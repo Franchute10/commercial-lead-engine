@@ -12,12 +12,14 @@ from uuid import UUID
 import typer
 from pydantic import JsonValue
 
+from lead_engine.application.evidence_lifecycle import EvidenceLifecycleService
 from lead_engine.application.scoring import CommercialScoringService
 from lead_engine.application.services import LeadService
 from lead_engine.cli.common import DatabaseOption, admin_errors, transaction
 from lead_engine.cli.scout import resolve_campaign
 from lead_engine.domain.commercial import BusinessSignal
 from lead_engine.domain.enums import SourceType
+from lead_engine.domain.evidence_lifecycle import EvidenceDispositionKind
 from lead_engine.domain.models import Evidence, Source, utc_now
 from lead_engine.domain.scoring import ScoreBand, ScoringResult
 from lead_engine.infrastructure.database import DEFAULT_DATABASE_URL, build_engine
@@ -85,7 +87,9 @@ def evidence_add(
             "HAS_PRODUCT_DISCOVERY_PATH",
             "CATALOG_PRESENT",
             "HAS_DIRECT_CONTACT_PATH",
+            "HAS_CONVERSION_CTA",
             "MAP_LINK_PRESENT",
+            "ADDRESS_PRESENT",
             "BUSINESS_HOURS_PRESENT",
             "HTTPS_MISSING",
             "SLOW_RESPONSE",
@@ -125,6 +129,73 @@ def evidence_add(
             )
             uow.commit()
             typer.echo(evidence.model_dump_json())
+
+
+def _dispose_evidence(
+    evidence_id: UUID,
+    kind: EvidenceDispositionKind,
+    actor: str,
+    reason: str,
+    replacement_evidence_id: UUID | None,
+    database_url: str,
+) -> None:
+    with admin_errors():
+        engine = build_engine(database_url)
+        try:
+            service = EvidenceLifecycleService(lambda: SqlAlchemyUnitOfWork(engine))
+            event = service.dispose(evidence_id, kind, actor, reason, replacement_evidence_id)
+            typer.echo(event.model_dump_json())
+        finally:
+            engine.dispose()
+
+
+@evidence_app.command("retract")
+def evidence_retract(
+    evidence_id: Annotated[UUID, typer.Option("--evidence-id")],
+    actor: Annotated[str, typer.Option("--actor")],
+    reason: Annotated[str, typer.Option("--reason")],
+    database_url: DatabaseOption = DEFAULT_DATABASE_URL,
+) -> None:
+    _dispose_evidence(
+        evidence_id, EvidenceDispositionKind.RETRACTED, actor, reason, None, database_url
+    )
+
+
+@evidence_app.command("supersede")
+def evidence_supersede(
+    evidence_id: Annotated[UUID, typer.Option("--evidence-id")],
+    replacement_evidence_id: Annotated[UUID, typer.Option("--replacement-evidence-id")],
+    actor: Annotated[str, typer.Option("--actor")],
+    reason: Annotated[str, typer.Option("--reason")],
+    database_url: DatabaseOption = DEFAULT_DATABASE_URL,
+) -> None:
+    _dispose_evidence(
+        evidence_id,
+        EvidenceDispositionKind.SUPERSEDED,
+        actor,
+        reason,
+        replacement_evidence_id,
+        database_url,
+    )
+
+
+@evidence_app.command("history")
+def evidence_history(
+    evidence_id: Annotated[UUID, typer.Option("--evidence-id")],
+    database_url: DatabaseOption = DEFAULT_DATABASE_URL,
+) -> None:
+    with admin_errors():
+        engine = build_engine(database_url)
+        try:
+            evidence, events = EvidenceLifecycleService(
+                lambda: SqlAlchemyUnitOfWork(engine)
+            ).history(evidence_id)
+            typer.echo(f"status={events[-1].kind.value if events else 'ACTIVE'}")
+            typer.echo(evidence.model_dump_json())
+            for event in events:
+                typer.echo(event.model_dump_json())
+        finally:
+            engine.dispose()
 
 
 @contextmanager

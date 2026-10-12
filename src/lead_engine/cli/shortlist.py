@@ -9,7 +9,12 @@ from uuid import UUID
 import typer
 
 from lead_engine.application.shortlist import DailyShortlistService
-from lead_engine.application.shortlist_export import ShortlistFormat, export_runs, render_decision
+from lead_engine.application.shortlist_export import (
+    ShortlistFormat,
+    export_runs,
+    render_decision,
+    render_frozen_decision,
+)
 from lead_engine.cli.common import DatabaseOption, admin_errors
 from lead_engine.cli.scout import resolve_campaign
 from lead_engine.domain.enums import CampaignType, LeadStatus
@@ -84,11 +89,16 @@ def today(
 @shortlist_app.command("explain")
 def explain(
     lead_id: Annotated[UUID, typer.Option()],
+    shortlist_run_id: Annotated[UUID | None, typer.Option("--shortlist-run-id")] = None,
     format: ShortlistFormat = ShortlistFormat.CONSOLE,
     config: ConfigOption = None,
     database_url: DatabaseOption = DEFAULT_DATABASE_URL,
 ) -> None:
-    with service(database_url, config) as ranking:
+    with service(database_url, None if shortlist_run_id else config) as ranking:
+        if shortlist_run_id is not None:
+            run, decision = ranking.explain_run(lead_id, shortlist_run_id)
+            typer.echo(render_frozen_decision(run, decision, format), nl=False)
+            return
         decision = ranking.explain(lead_id)
         typer.echo(
             decision.model_dump_json(indent=2)

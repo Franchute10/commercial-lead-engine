@@ -1,4 +1,26 @@
-# Commercial Research Analyst V1
+# Commercial Research Analyst V1 and V2
+
+## Pilot interpretation policy (v2)
+
+New briefs use `health-research-v2`, `construction-research-v2` or
+`hospitality-research-v2`. V1 remains available for interpreting its historical briefs. V2
+preserves the same evidence taxonomy and rule ordering, but distinguishes **technical signal →
+commercial hypothesis → research readiness → actionable outreach**. A static inspected-scope
+absence may support a cited hypothesis, but the primary opportunity stays `PARTIAL` and LOW
+priority until that key absence is corroborated by an active, explicit, sourced manual observation.
+V1 does not crawl multiple pages; broader coverage remains a future evidence source. The missing
+information and warnings say when corroboration is required.
+
+For Health, a missing direct-contact path does not create CUSTOMER_JOURNEY, CONTACTABILITY or
+MULTI_LOCATION_EXPERIENCE when a reservation path, booking CTA or conversion CTA is positively
+observed. A missing map link creates LOCAL_DISCOVERY only if an absent address or business-hours
+signal also corroborates location friction; no single map-link absence suffices. These are
+conservative checks, not universal demands for each feature on every site. Missing evidence is
+unknown, not absent. Neither scoring policy weights nor daily minimum score changed.
+
+Evidence retracted or superseded through the append-only lifecycle is excluded from new briefs;
+old briefs keep their exact sources, citations and status. A correction makes an earlier score
+historical until rescored, so a new brief cannot treat a pre-correction score as current.
 
 A commercial brief helps a human decide whether, why and how to approach a company. It consolidates
 stored facts, not aesthetic judgments or conversion-performance estimates. Missing data is not
@@ -11,8 +33,8 @@ CommercialResearchService reads lead/company/campaign, Source-backed Evidence, W
 latest LeadScore through repository/UoW ports, and reuses DecisionMakerFinder via the typed
 DecisionMakerRecommendations port. Replaceable ResearchPolicy implementations receive a frozen
 ResearchContext and return a validated CommercialBrief. Domain code imports no application or
-infrastructure. Built-in versions are health-research-v1, construction-research-v1 and
-hospitality-research-v1. Shared evidence resolution uses the existing Observations utility;
+infrastructure. The active built-ins use `*-research-v2`; `*-research-v1` remains available for
+historical interpretation. Shared evidence resolution uses the existing Observations utility;
 research completeness and status are computed independently of score completeness.
 
 Every generation inserts a new brief. Migration 0005 adds commercial_briefs without altering existing

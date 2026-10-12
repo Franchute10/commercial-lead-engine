@@ -1,5 +1,22 @@
 # Commercial Scorer V1
 
+## Correcting attributed evidence
+
+`evidence retract --evidence-id UUID --actor NAME --reason TEXT` records a permanent,
+append-only retraction. `evidence supersede --evidence-id OLD --replacement-evidence-id NEW
+--actor NAME --reason TEXT` links the old item to an already stored active replacement from the
+same company. `evidence history --evidence-id UUID` displays the original observation and its
+disposition. Migration 0009 adds only `evidence_dispositions`; Evidence, Source, statement,
+timestamps and historic scores are never deleted or rewritten. Each original evidence ID can be
+disposed once. The event records actor, UTC time and reason, and the database enforces one
+disposition per evidence ID. Cross-company replacement is rejected by the application service.
+
+New scoring resolves only active observations. A correction after a stored score makes that score
+ineligible as current shortlist/research input until it is regenerated; historical score views
+still show the original cited evidence. The `health-v1`, `construction-v1` and `hospitality-v1`
+weights and score bands remain unchanged. A technical absence can earn V1 heuristic points, but
+does not by itself prove a commercial opportunity or outreach readiness; see research v2.
+
 The score estimates commercial interest as a prospect for digital/customer-acquisition improvement.
 It is a documented prioritization heuristic, not a website quality grade, conversion forecast or
 probability of a sale. There is no AI inference, subjective visual assessment or automatic outreach.

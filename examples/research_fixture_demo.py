@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 
 from sqlalchemy import Engine
 
-from examples.scoring_fixture_demo import create_fixtures
+from examples.scoring_fixture_demo import corroborate_conversion_gaps, create_fixtures
 from lead_engine.application.contact_research import DecisionMakerResearchService
 from lead_engine.application.research import CommercialResearchService
 from lead_engine.application.research_export import markdown
@@ -22,6 +22,7 @@ from lead_engine.infrastructure.schema import upgrade_database
 
 def run_acceptance(engine: Engine) -> tuple[CommercialBrief, ...]:
     leads = create_fixtures(engine)
+    corroborate_conversion_gaps(engine, leads[:3])
     contacts = DecisionMakerResearchService(lambda: SqlAlchemyUnitOfWork(engine))
     for lead in leads[:3]:
         with SqlAlchemyUnitOfWork(engine) as uow:

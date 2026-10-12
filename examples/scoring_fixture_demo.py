@@ -139,6 +139,35 @@ def create_fixtures(engine: Engine) -> tuple[Lead, ...]:
     return tuple(leads)
 
 
+def corroborate_conversion_gaps(engine: Engine, leads: tuple[Lead, ...]) -> None:
+    """Give actionable downstream demos separate synthetic manual corroboration."""
+    for lead in leads:
+        with SqlAlchemyUnitOfWork(engine) as uow:
+            campaign = uow.repository.get(Campaign, lead.campaign_id)
+            assert campaign is not None
+            kind = campaign.campaign_type
+        gap = "HAS_QUOTE_PATH" if kind == CampaignType.CONSTRUCTION else "HAS_RESERVATION_PATH"
+        with SqlAlchemyUnitOfWork(engine) as uow:
+            reviewed = Source(
+                source_type=SourceType.MANUAL,
+                title="Synthetic multi-page conversion review",
+                url=f"http://{kind.value.lower()}.example/fixture-review",
+            )
+            uow.repository.add(reviewed)
+            uow.repository.add(
+                Evidence(
+                    company_id=lead.company_id,
+                    source_id=reviewed.id,
+                    evidence_type=gap,
+                    statement=f"Synthetic manual review confirms absent {gap}",
+                    raw_value=False,
+                    confidence=0.95,
+                    observed_at=utc_now(),
+                )
+            )
+            uow.commit()
+
+
 def run_acceptance(engine: Engine) -> tuple[ScoringResult, ...]:
     leads = create_fixtures(engine)
     scorer = CommercialScoringService(lambda: SqlAlchemyUnitOfWork(engine))

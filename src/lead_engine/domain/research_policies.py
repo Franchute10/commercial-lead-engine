@@ -1,5 +1,6 @@
 """Versioned research templates: supported anchors plus explicitly observed gaps."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
@@ -20,7 +21,7 @@ from lead_engine.domain.research import (
     ResearchContext,
     ResearchPolicy,
 )
-from lead_engine.domain.scoring import SignalState
+from lead_engine.domain.scoring import ScoringContext, SignalState
 
 
 @dataclass(frozen=True)
@@ -199,6 +200,12 @@ class V1ResearchPolicy:
     def version(self) -> str:
         return f"{self.campaign_type.value.lower()}-research-v1"
 
+    def allow_rule(self, rule: ResearchRule, fact: "Callable[[str], Fact]") -> bool:
+        return True
+
+    def provisional_negative(self, primary: Opportunity | None, snapshot: "ScoringContext") -> bool:
+        return False
+
     def generate(self, context: ResearchContext) -> CommercialBrief:
         snapshot = context.observations
         obs = Observations(snapshot)
@@ -212,6 +219,8 @@ class V1ResearchPolicy:
         opportunities = []
 
         def add_rule(rule: ResearchRule) -> None:
+            if not self.allow_rule(rule, fact):
+                return
             anchors = [
                 (signal, fact(signal))
                 for signal in rule.anchors
@@ -377,6 +386,12 @@ class V1ResearchPolicy:
         score = context.latest_score
         current_score = bool(score and now - timedelta(days=30) <= score.calculated_at <= now)
         if score and any(
+            ref not in {e.id for e in snapshot.evidence}
+            for component in score.components
+            for ref in component.evidence_ids
+        ):
+            current_score = False
+        if score and any(
             e.created_at > score.calculated_at
             for e in snapshot.evidence
             if e.evidence_type in BusinessSignal.__members__
@@ -480,6 +495,7 @@ class V1ResearchPolicy:
         completeness = sum(c.awarded_points for c in categories)
         ready = bool(
             primary
+            and not self.provisional_negative(primary, snapshot)
             and current_score
             and website_known
             and len(business_positive) >= 2
@@ -506,6 +522,8 @@ class V1ResearchPolicy:
                 and available
             ):
                 priority = OpportunityPriority.HIGH
+            if self.provisional_negative(primary, snapshot):
+                priority = OpportunityPriority.LOW
         missing = []
         if not snapshot.company.industry:
             missing.append("Industry unknown")
@@ -533,6 +551,10 @@ class V1ResearchPolicy:
             missing.append("Current commercial lead score unavailable")
         if not available:
             missing.append("No current supported decision maker; research the suggested roles")
+        if self.provisional_negative(primary, snapshot):
+            missing.append(
+                "Corroborate the static-scope absence before treating it as a ready opportunity"
+            )
         if not any(c.role_category.value in {"OWNER", "FOUNDER"} for c in supported_contacts):
             missing.append("Owner/founder not identified by current contact evidence")
         warnings = [
@@ -542,6 +564,8 @@ class V1ResearchPolicy:
                 "the full site or conversion performance"
             ),
         ]
+        if self.provisional_negative(primary, snapshot):
+            warnings.append("Primary opportunity is a provisional static-audit hypothesis")
         if not current_score and score:
             warnings.append("Latest score is historical/outdated; rescore before prioritizing")
         if any(c.verification != VerificationState.SUPPORTED for c in context.recommendations):
@@ -636,6 +660,63 @@ class V1ResearchPolicy:
         )
 
 
+@dataclass(frozen=True)
+class V2ResearchPolicy(V1ResearchPolicy):
+    """Conservative commercial interpretation of V1's stored technical signals."""
+
+    @property
+    def version(self) -> str:
+        return f"{self.campaign_type.value.lower()}-research-v2"
+
+    def allow_rule(self, rule: ResearchRule, fact: "Callable[[str], Fact]") -> bool:
+        if self.campaign_type == CampaignType.HEALTH and rule.kind in {
+            OpportunityType.CUSTOMER_JOURNEY,
+            OpportunityType.CONTACTABILITY,
+            OpportunityType.MULTI_LOCATION_EXPERIENCE,
+        }:
+            alternatives = (
+                "HAS_RESERVATION_PATH",
+                "BOOKING_CTA_PRESENT",
+                "HAS_CONVERSION_CTA",
+            )
+            if any(fact(signal).state == SignalState.PRESENT for signal in alternatives):
+                return False
+        if rule.kind == OpportunityType.LOCAL_DISCOVERY:
+            # A missing map link alone says little about location discovery.
+            corroboration = ("ADDRESS_PRESENT", "BUSINESS_HOURS_PRESENT")
+            if not any(fact(signal).state == SignalState.ABSENT for signal in corroboration):
+                return False
+        return True
+
+    def provisional_negative(self, primary: Opportunity | None, snapshot: "ScoringContext") -> bool:
+        if primary is None:
+            return False
+        refs = set(primary.supporting_evidence_ids)
+        for item in snapshot.evidence:
+            if item.id not in refs or item.evidence_type != "WEBSITE_SIGNAL_COVERAGE":
+                continue
+            raw = item.raw_value
+            if not isinstance(raw, dict) or raw.get("version") != "static-homepage-v1":
+                continue
+            signals = raw.get("signals")
+            if not isinstance(signals, dict):
+                continue
+            for signal, value in signals.items():
+                if value is not False or LABELS.get(signal) not in primary.reasons:
+                    continue
+                corroborated = any(
+                    other.id in refs
+                    and other.website_audit_id is None
+                    and other.evidence_type == signal
+                    and other.raw_value is False
+                    and other.confidence >= 0.7
+                    for other in snapshot.evidence
+                )
+                if not corroborated:
+                    return True
+        return False
+
+
 DEFAULT_RESEARCH_POLICIES: dict[CampaignType, ResearchPolicy] = {
-    kind: V1ResearchPolicy(kind) for kind in CampaignType
+    kind: V2ResearchPolicy(kind) for kind in CampaignType
 }

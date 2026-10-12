@@ -110,6 +110,45 @@ def render_decision(decision: ShortlistDecision) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_frozen_decision(
+    run: DailyShortlistRun, decision: ShortlistDecision, format: ShortlistFormat
+) -> str:
+    """Expose the stored item and run metadata, with no recomputation."""
+    if format == ShortlistFormat.JSON:
+        return (
+            json.dumps(
+                {
+                    "snapshot": "FROZEN SNAPSHOT",
+                    "run_id": str(run.id),
+                    "generated_at": run.generated_at.isoformat(),
+                    "policy_version": run.policy_version,
+                    "filters": run.filters.model_dump(mode="json"),
+                    "decision": decision.model_dump(mode="json"),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n"
+        )
+    item = decision.item
+    lines = [
+        "FROZEN SNAPSHOT",
+        f"Run: {run.id}; generated_at: {run.generated_at.isoformat()}",
+        f"Policy: {run.policy_version}; filters: {run.filters.model_dump_json()}",
+        f"Lead: {item.lead_id} — "
+        f"{safe_text(item.company_name, format == ShortlistFormat.MARKDOWN)}",
+        f"Score: {item.latest_score if item.latest_score is not None else 'unknown'}",
+        f"Research: {item.research_status.value if item.research_status else 'missing'}",
+        f"Opportunity: {item.primary_opportunity.value}; {item.opportunity_priority.value}",
+        f"Priority: {item.shortlist_priority_score}; "
+        f"next action: {item.recommended_next_action.value}",
+        "Suppression reasons: "
+        + (", ".join(reason.value for reason in decision.suppression_reasons) or "none"),
+        render_decision(decision).rstrip(),
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def export_runs(runs: list[DailyShortlistRun], format: ShortlistFormat) -> str:
     if format == ShortlistFormat.JSON:
         return (

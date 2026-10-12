@@ -6,14 +6,15 @@ from uuid import UUID
 
 from lead_engine.application.contact_research import DecisionMakerResearchService
 from lead_engine.application.discovery import UnitOfWorkFactory
+from lead_engine.application.evidence_lifecycle import current_evidence
 from lead_engine.application.ports import Repository
 from lead_engine.domain.audit import WebsiteAudit
 from lead_engine.domain.errors import NotFoundError
+from lead_engine.domain.evidence_lifecycle import EvidenceDisposition
 from lead_engine.domain.identity import normalize_name
 from lead_engine.domain.models import (
     Campaign,
     Company,
-    Evidence,
     Lead,
     LeadInteraction,
     LeadScore,
@@ -59,8 +60,30 @@ class DailyShortlistService:
         campaign = repo.get(Campaign, lead.campaign_id)
         if company is None or campaign is None:
             raise NotFoundError("Lead company/campaign missing")
-        scores = [s for s in repo.list(LeadScore, lead_id=lead.id) if s.calculated_at <= as_of]
-        briefs = [b for b in repo.list(CommercialBrief, lead_id=lead.id) if b.generated_at <= as_of]
+        evidence = current_evidence(repo, company.id, as_of)
+        active_ids = {item.id for item in evidence}
+        corrections = [
+            event
+            for event in repo.list(EvidenceDisposition, company_id=company.id)
+            if event.recorded_at <= as_of
+        ]
+        scores = [
+            s
+            for s in repo.list(LeadScore, lead_id=lead.id)
+            if s.calculated_at <= as_of
+            and not any(event.recorded_at > s.calculated_at for event in corrections)
+            and all(
+                ref in active_ids for component in s.components for ref in component.evidence_ids
+            )
+        ]
+        briefs = [
+            b
+            for b in repo.list(CommercialBrief, lead_id=lead.id)
+            if b.generated_at <= as_of
+            and not any(event.recorded_at > b.generated_at for event in corrections)
+            and all(ref in active_ids for ref in b.supporting_evidence_ids)
+            and all(ref in active_ids for ref in (c.evidence_id for c in b.evidence_citations))
+        ]
         company_leads = repo.list(Lead, company_id=company.id)
         company_interactions = tuple(
             interaction
@@ -80,7 +103,7 @@ class DailyShortlistService:
             target_roles=tuple(contacts.target_roles),
             interactions=company_interactions,
             audits=tuple(repo.list(WebsiteAudit, company_id=company.id)),
-            evidence=tuple(repo.list(Evidence, company_id=company.id)),
+            evidence=evidence,
             suppressions=tuple(repo.list(ShortlistSuppression, lead_id=lead.id)),
             as_of=as_of,
         )
@@ -182,6 +205,26 @@ class DailyShortlistService:
             return self.policy.evaluate(
                 self.build_context(uow.repository, lead, as_of), ShortlistFilters(), self.settings
             )
+
+    def explain_run(
+        self, lead_id: UUID, run_id: UUID
+    ) -> tuple[DailyShortlistRun, ShortlistDecision]:
+        """Read a persisted decision without consulting today's policy or records."""
+        with self.factory() as uow:
+            run = uow.repository.get(DailyShortlistRun, run_id)
+            if run is None:
+                raise NotFoundError("Shortlist run not found")
+            for item in run.items:
+                if item.lead_id == lead_id:
+                    return run, ShortlistDecision(item=item)
+            for decision in run.suppressed:
+                if decision.item.lead_id == lead_id:
+                    return run, decision
+            if lead_id in run.eligible_not_selected:
+                raise ValueError(
+                    "Lead was eligible beyond the run limit; no item snapshot was stored"
+                )
+            raise NotFoundError("Lead does not belong to this shortlist run")
 
     def history(self, limit: int = 10) -> list[DailyShortlistRun]:
         if not 1 <= limit <= 100:

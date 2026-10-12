@@ -6,15 +6,16 @@ from uuid import UUID
 
 from lead_engine.application.contact_research import DecisionMakerResearchService
 from lead_engine.application.discovery import UnitOfWorkFactory
+from lead_engine.application.evidence_lifecycle import current_evidence
 from lead_engine.domain.audit import WebsiteAudit
 from lead_engine.domain.contact_research import RecommendationResult
 from lead_engine.domain.enums import CampaignType
 from lead_engine.domain.errors import NotFoundError
+from lead_engine.domain.evidence_lifecycle import EvidenceDisposition
 from lead_engine.domain.models import (
     Campaign,
     Company,
     Contact,
-    Evidence,
     Lead,
     LeadScore,
     Source,
@@ -57,10 +58,20 @@ class CommercialResearchService:
             cutoff = utc_now()
             evidence = tuple(
                 e
-                for e in repo.list(Evidence, company_id=company.id)
+                for e in current_evidence(repo, company.id, cutoff)
                 if e.created_at <= cutoff and e.observed_at <= cutoff
             )
-            scores = [s for s in repo.list(LeadScore, lead_id=lead.id) if s.calculated_at <= cutoff]
+            corrections = [
+                event
+                for event in repo.list(EvidenceDisposition, company_id=company.id)
+                if event.recorded_at <= cutoff
+            ]
+            scores = [
+                s
+                for s in repo.list(LeadScore, lead_id=lead.id)
+                if s.calculated_at <= cutoff
+                and not any(event.recorded_at > s.calculated_at for event in corrections)
+            ]
             latest = max(scores, key=lambda s: (s.calculated_at, str(s.id))) if scores else None
             band = None
             if latest:

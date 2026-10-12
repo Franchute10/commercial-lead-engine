@@ -1,5 +1,20 @@
 # Daily Shortlist V1
 
+## Current versus frozen explanations
+
+`shortlist explain --lead-id UUID` evaluates the current policy, data and default minimum score
+(40). Add `--shortlist-run-id UUID` to read the exact persisted selected or suppressed item in
+that run. The frozen output explicitly says `FROZEN SNAPSHOT` and includes the run timestamp,
+policy version, filters, score, research status, opportunity, priority, next action and
+suppression reasons. It never reevaluates against today's settings. A run stores only UUIDs for
+eligible candidates beyond its limit, so those have no frozen item explanation.
+
+A run with `--min-score 0` is a diagnostic research view, not the default daily/actionable list.
+The default remains 40. After retracting or superseding evidence, old runs stay reproducible;
+new shortlist decisions exclude the retired observation and treat earlier scores and briefs as
+outdated until regenerated. The path is **technical signal → commercial hypothesis → research
+readiness → actionable outreach**, always subject to human review.
+
 The shortlist ranks work that is actionable now, not just companies with high LeadScores. It combines
 current research, explicit contactability, pipeline and interaction timing into a separate 0–100
 priority. Every action is a human recommendation. No LinkedIn action, email, WhatsApp, phone call,
@@ -166,6 +181,7 @@ python -m lead_engine shortlist today --min-research-completeness 70 --pipeline-
 python -m lead_engine shortlist today --opportunity APPOINTMENT_CONVERSION
 python -m lead_engine shortlist explain --lead-id LEAD_UUID
 python -m lead_engine shortlist explain --lead-id LEAD_UUID --format json
+python -m lead_engine shortlist explain --lead-id LEAD_UUID --shortlist-run-id RUN_UUID --format json
 python -m lead_engine shortlist history --format json
 python -m lead_engine shortlist suppress --lead-id LEAD_UUID --days 14 --reason "Waiting for referral"
 python -m lead_engine shortlist unsuppress --lead-id LEAD_UUID

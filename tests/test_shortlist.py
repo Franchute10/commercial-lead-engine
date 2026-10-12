@@ -14,7 +14,7 @@ from pydantic import JsonValue, ValidationError
 from sqlalchemy import Engine
 from typer.testing import CliRunner
 
-from examples.shortlist_fixture_demo import run_acceptance
+from examples.shortlist_fixture_demo import create_shortlist_fixtures, run_acceptance
 from lead_engine.application.shortlist import DailyShortlistService
 from lead_engine.application.shortlist_export import ShortlistFormat, export_runs
 from lead_engine.cli.main import app
@@ -737,6 +737,68 @@ def test_cli(engine: Engine, database_url: str, tmp_path: Path) -> None:
     )
 
 
+def test_frozen_explain_preserves_diagnostic_minimum(engine: Engine, database_url: str) -> None:
+    ids = create_shortlist_fixtures(engine)
+    score_id = uuid4()
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        uow.repository.add(
+            LeadScore(
+                id=score_id,
+                lead_id=ids[0],
+                total_score=Decimal(30),
+                scoring_version="diagnostic-fixture-v1",
+                components=(
+                    ScoreComponent(
+                        lead_score_id=score_id,
+                        criterion="synthetic diagnostic",
+                        points_awarded=Decimal(30),
+                        max_points=Decimal(100),
+                        explanation="Synthetic diagnostic score below daily minimum",
+                    ),
+                ),
+            )
+        )
+        uow.commit()
+    from lead_engine.application.research import CommercialResearchService
+
+    CommercialResearchService(lambda: SqlAlchemyUnitOfWork(engine)).research_lead(ids[0])
+    service = DailyShortlistService(lambda: SqlAlchemyUnitOfWork(engine))
+    run = service.today(ShortlistFilters(minimum_lead_score=0, limit=100))
+    original = next(item for item in run.items if item.lead_id == ids[0])
+    assert original.latest_score == 30
+    assert not service.explain_run(ids[0], run.id)[1].suppression_reasons
+    assert SuppressionReason.LOW_SCORE in service.explain(ids[0]).suppression_reasons
+    cli = CliRunner().invoke(
+        app,
+        [
+            "shortlist",
+            "explain",
+            "--lead-id",
+            str(ids[0]),
+            "--shortlist-run-id",
+            str(run.id),
+            "--format",
+            "json",
+            "--database-url",
+            database_url,
+        ],
+    )
+    assert cli.exit_code == 0, cli.output
+    saved = json.loads(cli.stdout)
+    assert saved["snapshot"] == "FROZEN SNAPSHOT"
+    assert saved["filters"]["minimum_lead_score"] == 0
+    assert saved["decision"]["item"]["latest_score"] == 30
+    assert saved["decision"]["suppression_reasons"] == []
+    suppressed = run.suppressed[0]
+    assert service.explain_run(suppressed.item.lead_id, run.id)[1] == suppressed
+    limited = service.today(ShortlistFilters(minimum_lead_score=0, limit=1))
+    assert limited.eligible_not_selected
+    with pytest.raises(ValueError, match="no item snapshot"):
+        service.explain_run(limited.eligible_not_selected[0], limited.id)
+    with pytest.raises(ValueError, match="not found"):
+        service.explain_run(ids[0], uuid4())
+
+
 def test_explicit_whatsapp_claim_without_phone_inference() -> None:
     c = context()
     person = c.contacts[0]
@@ -802,7 +864,7 @@ def test_shortlist_migration_preserves_existing_briefs(database_url: str) -> Non
                 uow.repository.add(entity)
             uow.commit()
         upgrade_database(database_url)
-        assert database_revision(engine) == "0008"
+        assert database_revision(engine) == "0009"
         command.downgrade(migration_config(database_url), "0005")
         with SqlAlchemyUnitOfWork(engine) as uow:
             assert uow.repository.get(CommercialBrief, c.brief.id) == c.brief

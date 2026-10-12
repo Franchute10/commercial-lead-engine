@@ -117,6 +117,35 @@ class EvidenceRow(EntityRow):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime())
 
 
+class EvidenceDispositionRow(EntityRow):
+    __tablename__ = "evidence_dispositions"
+    __table_args__ = (
+        UniqueConstraint("evidence_id", name="uq_evidence_disposition_once"),
+        CheckConstraint(
+            "(kind = 'RETRACTED' AND replacement_evidence_id IS NULL) OR "
+            "(kind = 'SUPERSEDED' AND replacement_evidence_id IS NOT NULL)",
+            name="ck_evidence_disposition_replacement",
+        ),
+        CheckConstraint(
+            "replacement_evidence_id IS NULL OR replacement_evidence_id != evidence_id",
+            name="ck_evidence_disposition_not_self",
+        ),
+    )
+    evidence_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("evidence.id"), index=True
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("companies.id"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(20))
+    replacement_evidence_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("evidence.id"), nullable=True
+    )
+    actor: Mapped[str] = mapped_column(String(1000))
+    reason: Mapped[str] = mapped_column(String(1000))
+    recorded_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
 class CampaignRow(EntityRow):
     __tablename__ = "campaigns"
     name: Mapped[str] = mapped_column(String(1000))
