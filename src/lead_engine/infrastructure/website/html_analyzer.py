@@ -28,6 +28,7 @@ PROVIDERS = (
     "calendly.com",
     "booksy.com",
 )
+PROVIDER_SYSTEM_PATHS = {"about", "help", "privacy", "terms", "login", "signup", "careers"}
 
 
 def is_host(host: str, domain: str) -> bool:
@@ -36,6 +37,14 @@ def is_host(host: str, domain: str) -> bool:
 
 def is_concrete_social_link(host: str, path: str, domain: str) -> bool:
     return is_host(host, domain) and bool(path.strip("/"))
+
+
+def is_concrete_reservation_provider_link(host: str, path: str, domain: str) -> bool:
+    resource_path = path.strip("/")
+    if not is_host(host, domain) or not resource_path:
+        return False
+    first_segment = resource_path.split("/", maxsplit=1)[0].casefold()
+    return first_segment not in PROVIDER_SYSTEM_PATHS
 
 
 def has_concrete_tel_target(href: str) -> bool:
@@ -167,7 +176,10 @@ class BeautifulSoupHtmlAnalyzer:
                 add(
                     FindingType.MAP_LINK_PRESENT, "HTML contains a recognized map link", href[:1000]
                 )
-            if any(is_host(host, provider) for provider in PROVIDERS):
+            if any(
+                is_concrete_reservation_provider_link(host, target.path, provider)
+                for provider in PROVIDERS
+            ):
                 add(
                     FindingType.RESERVATION_PROVIDER_PRESENT,
                     "HTML references a recognized reservation provider",

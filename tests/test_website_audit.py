@@ -195,6 +195,64 @@ def test_direct_contact_links_require_concrete_targets(
 
 
 @pytest.mark.parametrize(
+    ("href", "expected"),
+    [
+        ("https://opentable.com/", False),
+        ("https://www.opentable.com/", False),
+        ("https://sevenrooms.com/", False),
+        ("https://www.sevenrooms.com/", False),
+        ("https://covermanager.com/", False),
+        ("https://www.covermanager.com/", False),
+        ("https://resy.com/", False),
+        ("https://www.resy.com/", False),
+        ("https://calendly.com/", False),
+        ("https://www.calendly.com/", False),
+        ("https://booksy.com/", False),
+        ("https://www.booksy.com/", False),
+        ("https://calendly.com/?utm_source=footer", False),
+        ("https://resy.com/#booking", False),
+        ("https://opentable.com/?ref=footer", False),
+        ("https://calendly.com/demo", True),
+        ("https://calendly.com/demo/30min", True),
+        ("https://www.opentable.com/r/demo-restaurant", True),
+        ("https://resy.com/cities/lima/venues/demo", True),
+        ("https://www.sevenrooms.com/reservations/demo", True),
+        ("https://www.covermanager.com/reservation/demo", True),
+        ("https://booksy.com/en-us/demo", True),
+        ("https://calendly.com/about", False),
+        ("https://resy.com/help", False),
+        ("https://booksy.com/privacy", False),
+        ("https://opentable.com/terms", False),
+        ("https://sevenrooms.com/login", False),
+        ("https://covermanager.com/signup", False),
+        ("https://calendly.com/careers", False),
+        ("https://calendly.com.evil.example/demo", False),
+        ("https://resy.com.evil.example/cities/demo", False),
+        ("https://opentable.com.evil.example/r/demo", False),
+    ],
+)
+def test_reservation_provider_findings_require_concrete_resources(
+    href: str, expected: bool
+) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(
+        f'<a href="{href}">Provider</a>', "https://site.example/"
+    )
+    kinds = {item.kind for item in analysis.findings}
+    assert (FindingType.RESERVATION_PROVIDER_PRESENT in kinds) is expected
+    assert (FindingType.HAS_RESERVATION_PATH in kinds) is expected
+
+
+def test_local_booking_cta_still_derives_reservation_path() -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(
+        '<a href="/reservar">Reservar cita</a>', "https://site.example/"
+    )
+    kinds = {item.kind for item in analysis.findings}
+    assert FindingType.BOOKING_CTA_PRESENT in kinds
+    assert FindingType.HAS_RESERVATION_PATH in kinds
+    assert FindingType.RESERVATION_PROVIDER_PRESENT not in kinds
+
+
+@pytest.mark.parametrize(
     ("url", "platform"),
     [
         ("https://facebook.com/", None),
