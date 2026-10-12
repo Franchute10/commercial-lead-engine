@@ -86,6 +86,42 @@ def test_booking_signals_es_en_and_metadata() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("markup", "expected"),
+    [
+        ('<a href="/reservar">Reservar</a>', True),
+        ('<a href="/reservar">Reservar mesa</a>', True),
+        ("<button>Reservar cita</button>", True),
+        ("<button>Agendar</button>", True),
+        ("<button>Book now</button>", True),
+        ('<a href="/booking">Book appointment</a>', True),
+        ('<input type="submit" value="Reservar">', True),
+        ('<a href="/reservar">Ver disponibilidad</a>', True),
+        ('<a href="/booking">Continue</a>', True),
+        ('<a href="/appointments/book">Continue</a>', True),
+        ('<a href="/blog/how-to-book-a-table">Continue</a>', False),
+        ('<a href="/blog/booking-trends">Continue</a>', False),
+        ('<a href="/news/reservas-en-restaurantes">Continue</a>', False),
+        ('<a href="/article/agenda-digital">Continue</a>', False),
+        ('<a href="/articles/how-to-book">Continue</a>', False),
+        ('<a href="/insights/booking-technology">Continue</a>', False),
+        ('<a href="/post/how-to-book">Continue</a>', False),
+        ('<a href="/posts/reservation-tips">Continue</a>', False),
+        ('<a href="/blog/booking-guide">Read our booking guide</a>', False),
+        ('<a href="/articles/booking-tips">Booking tips</a>', False),
+        ('<a href="/insights/reservation-guide">Reservation guide</a>', False),
+        ('<a href="/blog/reservar">Book now</a>', False),
+        ('<a href="/booking">Book now</a>', True),
+        ('<a href="/reservar">Reserva ahora</a>', True),
+    ],
+)
+def test_booking_cta_excludes_editorial_links(markup: str, expected: bool) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(markup, "https://site.example/")
+    kinds = {item.kind for item in analysis.findings}
+    assert (FindingType.BOOKING_CTA_PRESENT in kinds) is expected
+    assert (FindingType.HAS_RESERVATION_PATH in kinds) is expected
+
+
 def test_contact_and_catalog_signals() -> None:
     analyzer = BeautifulSoupHtmlAnalyzer()
     contact = analyzer.analyze(

@@ -20,6 +20,16 @@ PRODUCTS = r"\b(productos|products|producto|product)\b"
 SERVICES = r"\b(servicios|services|servicio|service)\b"
 ECOMMERCE = r"\b(carrito|cart|checkout|comprar|add to cart|anadir al carrito|pagar)\b"
 PRIVACY = r"\b(privacidad|privacy|politica de privacidad)\b"
+EDITORIAL_PATH_PREFIXES = {
+    "blog",
+    "blogs",
+    "news",
+    "article",
+    "articles",
+    "insights",
+    "post",
+    "posts",
+}
 PROVIDERS = (
     "opentable.com",
     "sevenrooms.com",
@@ -58,6 +68,11 @@ def is_host(host: str, domain: str) -> bool:
 
 def is_concrete_social_link(host: str, path: str, domain: str) -> bool:
     return is_host(host, domain) and bool(path.strip("/"))
+
+
+def is_editorial_path(path: str) -> bool:
+    first_segment = path.strip("/").split("/", maxsplit=1)[0].casefold()
+    return first_segment in EDITORIAL_PATH_PREFIXES
 
 
 def find_business_hours(text: str) -> str | None:
@@ -231,6 +246,12 @@ class BeautifulSoupHtmlAnalyzer:
             target = urlsplit(urljoin(page_url, href))
             host = (target.hostname or "").lower().rstrip(".")
             action = normalize_name(text + " " + (target.path if href else ""))
+            booking_action = text
+            if element.name == "a" and href:
+                booking_action = (
+                    "" if is_editorial_path(target.path) else booking_action + " " + target.path
+                )
+            booking_action = normalize_name(booking_action)
             if has_concrete_tel_target(href):
                 add(FindingType.PHONE_LINK_PRESENT, "HTML contains a tel link", href[:1000])
             if has_concrete_mailto_target(href):
@@ -273,7 +294,7 @@ class BeautifulSoupHtmlAnalyzer:
                 (
                     BOOKING,
                     FindingType.BOOKING_CTA_PRESENT,
-                    "Action text/path matches an ES/EN booking keyword",
+                    "CTA text or non-editorial path matches an ES/EN booking keyword",
                 ),
                 (
                     QUOTE,
@@ -286,7 +307,8 @@ class BeautifulSoupHtmlAnalyzer:
                     "Action text/path matches a cart/checkout/purchase keyword",
                 ),
             ):
-                if element.name != "iframe" and re.search(pattern, action):
+                candidate = booking_action if kind == FindingType.BOOKING_CTA_PRESENT else action
+                if element.name != "iframe" and re.search(pattern, candidate):
                     add(kind, description, {"text": text[:500], "href": href[:500]}, 0.9)
             # Page/path signals require a link, not an incidental word in a paragraph/button.
             if element.name == "a" and href and target.scheme in {"http", "https"}:
