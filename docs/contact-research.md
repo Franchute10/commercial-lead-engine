@@ -67,7 +67,7 @@ Reliability contributes 0–10 points:
 
 | Source | Points |
 |---|---:|
-| Exact official company website hostname | 10 |
+| Official company website hostname (optional leading `www.` equivalent) | 10 |
 | Government/business registry | 9 |
 | Public LinkedIn/professional observation | 8 |
 | Public Facebook/Instagram observation | 7 |
@@ -75,7 +75,8 @@ Reliability contributes 0–10 points:
 | Other source | 5 |
 | Search snippet | 2 |
 
-Official hostname takes precedence even for manual input. Source types are provider/human assertions;
+Official hostname takes precedence even for manual input. Only the leading `www.` label is optional;
+other subdomains and suffix lookalikes retain their normal source-type reliability. Source types are provider/human assertions;
 V1 does not authenticate ownership of social accounts. Unknown websites receive 5 rather than
 claiming they are official. A valid manual URL is not automatically low quality, but a URL alone
 cannot establish a role. HIGH confidence requires reliability >=8, candidate confidence >=0.85,

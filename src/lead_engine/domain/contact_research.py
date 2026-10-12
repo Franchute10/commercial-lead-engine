@@ -157,9 +157,14 @@ def identity_keys(candidate: ContactCandidate, company_id: UUID) -> list[str]:
     return keys
 
 
+def _official_hostname(url: str) -> str | None:
+    host = urlsplit(url).hostname
+    return host[4:] if host and host.startswith("www.") else host
+
+
 def source_reliability(candidate: ContactCandidate, company: Company) -> int:
-    official = urlsplit(company.website or "").hostname
-    host = urlsplit(candidate.source_url).hostname
+    official = _official_hostname(company.website or "")
+    host = _official_hostname(candidate.source_url)
     if official and host == official:
         return 10
     return {

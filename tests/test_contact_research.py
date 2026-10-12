@@ -262,6 +262,24 @@ def test_reliability(kind: SourceType, points: int) -> None:
 
 
 @pytest.mark.parametrize(
+    ("company_url", "source_url", "expected"),
+    [
+        ("https://clinic.example/", "http://clinic.example:8080/team", 10),
+        ("https://www.gastrosalud.com.pe/", "https://gastrosalud.com.pe/team", 10),
+        ("https://gastrosalud.com.pe/", "https://www.gastrosalud.com.pe/team", 10),
+        ("https://gastrosalud.com.pe/", "https://unrelated.example/team", 6),
+        ("https://gastrosalud.com.pe/", "https://staff.gastrosalud.com.pe/team", 6),
+        ("https://gastrosalud.com.pe/", "https://booking.gastrosalud.com.pe/team", 6),
+        ("https://gastrosalud.com.pe/", "https://gastrosalud.com.pe.evil.test/team", 6),
+    ],
+)
+def test_official_hostname_www_only(company_url: str, source_url: str, expected: int) -> None:
+    company = Company(canonical_name="Clinic", website=company_url)
+    observed = candidate(company, source_url=source_url, source_type=SourceType.MANUAL)
+    assert source_reliability(observed, company) == expected
+
+
+@pytest.mark.parametrize(
     "line,category",
     [
         ("Gerente General: Ana Pérez", RoleCategory.GENERAL_MANAGEMENT),
