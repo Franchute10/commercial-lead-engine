@@ -52,7 +52,7 @@ class HttpxFetcher:
 
     def _request(
         self, client: httpx.Client, url: str, deadline: float, *, robots: bool = False
-    ) -> tuple[int, dict[str, str], str, int, float]:
+    ) -> tuple[int, dict[str, str], str, int, float, tuple[str, ...]]:
         if self.same_domain_only and urlsplit(url).hostname != self._research_host:
             raise FetchPolicyError(
                 "EXTERNAL_DOMAIN", "Contact research stays on the company domain"
@@ -72,46 +72,121 @@ class HttpxFetcher:
                     code = response.status_code
                     # No body analysis/download for errors or redirects.
                     if not 200 <= code < 300:
-                        return code, headers, "", 0, (monotonic() - started) * 1000
-                    if headers.get("content-encoding", "identity").lower() not in {"", "identity"}:
+                        return (
+                            code,
+                            headers,
+                            "",
+                            0,
+                            (monotonic() - started) * 1000,
+                            (),
+                        )
+                    if headers.get("content-encoding", "identity").lower() not in {
+                        "",
+                        "identity",
+                    }:
                         raise FetchPolicyError(
                             "UNSUPPORTED_ENCODING", "Compressed responses are not inspected"
                         )
+
                     cap = (
                         min(self.settings.max_response_bytes, 100000)
                         if robots
                         else self.settings.max_response_bytes
                     )
+
+                    content_type = (
+                        headers.get("content-type", "").split(";", 1)[0].strip().lower()
+                    )
+                    partial_html_allowed = not robots and content_type in {
+                        "text/html",
+                        "application/xhtml+xml",
+                    }
+
                     length = headers.get("content-length", "")
-                    if length.isdigit() and int(length) > cap:
+                    declared_too_large = length.isdigit() and int(length) > cap
+
+                    # robots.txt and non-HTML resources retain the strict hard-fail behavior.
+                    if declared_too_large and not partial_html_allowed:
                         raise FetchPolicyError(
                             "RESPONSE_TOO_LARGE", "Declared response size exceeds limit"
                         )
+
                     chunks: list[bytes] = []
                     size = 0
-                    # Identity encoding prevents compression expansion.
-                    for chunk in response.iter_bytes():
-                        size += len(chunk)
-                        if size > cap:
-                            raise FetchPolicyError(
-                                "RESPONSE_TOO_LARGE", "Decoded response exceeds limit"
+                    warnings: list[str] = []
+
+                    try:
+                        for chunk in response.iter_bytes():
+                            available = cap - size
+
+                            if len(chunk) > available:
+                                if not partial_html_allowed:
+                                    raise FetchPolicyError(
+                                        "RESPONSE_TOO_LARGE",
+                                        "Decoded response exceeds limit",
+                                    )
+                                if available > 0:
+                                    chunks.append(chunk[:available])
+                                    size += available
+                                warnings.append(
+                                    "HTML response truncated at configured byte limit"
+                                )
+                                break
+
+                            chunks.append(chunk)
+                            size += len(chunk)
+
+                            if monotonic() >= deadline:
+                                if partial_html_allowed and chunks:
+                                    warnings.append(
+                                        "HTML read timeout after partial response; "
+                                        "partial content retained"
+                                    )
+                                    break
+                                raise FetchPolicyError(
+                                    "TIMEOUT", "Total fetch budget exhausted"
+                                )
+
+                            if partial_html_allowed and declared_too_large and size >= cap:
+                                warnings.append(
+                                    "HTML response truncated at configured byte limit"
+                                )
+                                break
+
+                    except httpx.ReadTimeout:
+                        if partial_html_allowed and chunks:
+                            warnings.append(
+                                "HTML read timeout after partial response; "
+                                "partial content retained"
                             )
-                        if monotonic() >= deadline:
-                            raise FetchPolicyError("TIMEOUT", "Total fetch budget exhausted")
-                        chunks.append(chunk)
-                    body = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
-                    return code, headers, body, size, (monotonic() - started) * 1000
+                        else:
+                            raise
+
+                    body = b"".join(chunks).decode(
+                        response.encoding or "utf-8",
+                        errors="replace",
+                    )
+                    return (
+                        code,
+                        headers,
+                        body,
+                        size,
+                        (monotonic() - started) * 1000,
+                        tuple(warnings),
+                    )
+
             except httpx.ConnectTimeout:
                 # Only GET connect-timeout is retried once; no HTTP-error/TLS/read retries.
                 if attempt == self.settings.retry_count:
                     raise
+
         raise RuntimeError("Unreachable retry state")
 
     def _robots(self, client: httpx.Client, page: str, deadline: float) -> RobotFileParser:
         current = urljoin(page, "/robots.txt")
         parser = RobotFileParser(current)
         for _ in range(self.settings.max_redirects + 1):
-            code, headers, body, _, _ = self._request(client, current, deadline, robots=True)
+            code, headers, body, _, _, _ = self._request(client, current, deadline, robots=True)
             if code in {301, 302, 303, 307, 308} and headers.get("location"):
                 current = urljoin(current, headers["location"])
                 self.policy.resolve(current)
@@ -170,7 +245,9 @@ class HttpxFetcher:
                     raise FetchPolicyError(
                         "ROBOTS_RATE_LIMIT", "Robots requests a slower request rate; audit deferred"
                     )
-                status, headers, body, size, elapsed = self._request(client, current, deadline)
+                status, headers, body, size, elapsed, warnings = self._request(
+                    client, current, deadline
+                )
                 if status in {301, 302, 303, 307, 308}:
                     if redirect_count >= self.settings.max_redirects:
                         raise FetchPolicyError("REDIRECT_LIMIT", "Homepage redirect limit exceeded")
@@ -206,6 +283,7 @@ class HttpxFetcher:
                     body_size_bytes=size,
                     content_type=headers.get("content-type", ""),
                     redirects=tuple(hops),
+                    warnings=warnings,
                 )
             raise FetchPolicyError("REDIRECT_LIMIT", "Homepage redirect limit exceeded")
         except FetchPolicyError as error:

@@ -35,3 +35,52 @@ LEAD-SCORE-001 adds one explicit tested-signal coverage Evidence record to each 
 The historical LEAD-WEB-001 table above remains the original acceptance record. Re-running the current
 demo now yields 20/16/11/1 evidence respectively (48 total), with the same 4 audits/4 Sources and 6
 mocked requests. This additive observation lets scoring distinguish measured absence from unknown.
+
+## WEB-AUDIT-002 — Bounded partial fetch resilience
+
+Real-world validation after PILOT-002 showed that some public HTML homepages exceed the configured
+response-size budget or time out during body retrieval. These conditions must remain bounded without
+turning unobserved page content into negative commercial evidence.
+
+WEB-AUDIT-002 keeps the existing SSRF, DNS rebinding, redirect, robots, compression and response
+budget safeguards. It changes only successful public HTML responses:
+
+- `text/html` and `application/xhtml+xml` may retain a body prefix up to `max_response_bytes`.
+- If the HTML body exceeds that budget, the retained prefix is returned with an explicit truncation
+  warning instead of `RESPONSE_TOO_LARGE`.
+- If an HTML read timeout occurs after at least one body chunk was received, the retained prefix is
+  returned with an explicit partial-read warning.
+- A timeout before any usable body is received remains a hard `TIMEOUT`.
+- robots.txt and non-HTML resources retain the prior strict hard-fail behavior.
+- Unsupported compressed responses remain rejected.
+- Partial HTML audits are `PARTIAL`, not `SUCCESS`.
+- Positive findings observed in the retained prefix may be persisted.
+- `WEBSITE_SIGNAL_COVERAGE` is never emitted for a partial document, so signals not observed in the
+  retained prefix remain unknown rather than false.
+- A recoverable partial HTML response does not emit `FETCH_ERROR`.
+
+Automated acceptance covers both oversized HTML and read-timeout-after-prefix behavior, plus the
+audit-layer rule that partial content may establish positive findings only.
+
+Real-world validation on an isolated Pilot 02 database produced:
+
+| Prior condition | WEB-AUDIT-002 result |
+| --- | --- |
+| Oversized public HTML response | PARTIAL / HTTP 200 / truncated prefix retained |
+| Oversized public HTML response | PARTIAL / HTTP 200 / truncated prefix retained |
+| Timeout before usable body | FAILED / TIMEOUT |
+
+Both oversized HTML cases produced positive metadata findings without `WEBSITE_SIGNAL_COVERAGE`
+or `FETCH_ERROR`. The timeout case returned no usable body and therefore correctly remained FAILED
+rather than manufacturing a partial observation.
+
+Validation gates:
+
+- 59 focused website-audit tests passed.
+- 437 full-suite tests passed.
+- Ruff passed.
+- mypy passed on 79 source files.
+- `git diff --check` passed.
+
+This task does not change scoring weights, research policy, outreach policy, hostname attribution,
+template/context interpretation or commercial opportunity rules.

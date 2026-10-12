@@ -409,3 +409,60 @@ def test_migration_preserves_existing_evidence_and_score_associations(
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM evidence")) == 1
         assert connection.scalar(text("SELECT count(*) FROM component_evidence")) == 1
+
+
+def test_truncated_html_audit_is_partial_positive_only_without_coverage(
+    engine: Engine,
+) -> None:
+    prefix = (
+        b'<html><head>'
+        b'<meta name="viewport" content="width=device-width">'
+        b'</head><body>'
+        b'<a href="/book">Reservar cita</a>'
+    )
+    body = prefix + (b"x" * 2000)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        return httpx.Response(
+            200,
+            stream=httpx.ByteStream(body),
+            headers={
+                "Content-Type": "text/html; charset=utf-8",
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    audit_settings = AuditSettings(
+        min_request_interval_seconds=0,
+        max_response_bytes=1024,
+    )
+    fetcher = HttpxFetcher(
+        audit_settings,
+        policy=PublicUrlPolicy(public_dns),
+        transport=httpx.MockTransport(handler),
+    )
+
+    try:
+        stored = company(engine)
+        result = service(engine, fetcher, audit_settings).audit_company(stored.id)
+
+        kinds = {item.kind for item in result.findings}
+
+        assert result.audit.status == AuditStatus.PARTIAL
+        assert result.reachable
+        assert FindingType.WEBSITE_REACHABLE in kinds
+        assert FindingType.MOBILE_VIEWPORT_PRESENT in kinds
+        assert FindingType.BOOKING_CTA_PRESENT in kinds
+        assert FindingType.HAS_RESERVATION_PATH in kinds
+
+        # A partial document can establish only what was positively observed.
+        assert FindingType.WEBSITE_SIGNAL_COVERAGE not in kinds
+        assert FindingType.FETCH_ERROR not in kinds
+
+        assert result.audit.error_code is None
+        assert result.warnings
+        assert any("trunc" in warning.lower() for warning in result.warnings)
+    finally:
+        fetcher.close()

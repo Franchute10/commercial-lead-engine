@@ -291,3 +291,79 @@ def test_transport_does_not_forward_cookies_or_credentials() -> None:
         )
     finally:
         transport.close()
+
+
+def test_large_html_preserves_bounded_partial_prefix() -> None:
+    prefix = (
+        b'<html><head>'
+        b'<meta name="viewport" content="width=device-width">'
+        b'</head><body><a href="/book">Reservar cita</a>'
+    )
+    body = prefix + (b"x" * 2000)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        return httpx.Response(
+            200,
+            stream=httpx.ByteStream(body),
+            headers={
+                "Content-Type": "text/html; charset=utf-8",
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    fetcher = HttpxFetcher(
+        settings(max_response_bytes=1024),
+        policy=PublicUrlPolicy(resolver),
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        result = fetcher.fetch("https://site.example")
+        assert result.error_code is None
+        assert result.http_status == 200
+        assert result.body
+        assert len(result.body.encode("utf-8")) <= 1024
+        assert "viewport" in result.body
+        assert result.warnings
+        assert any("trunc" in warning.lower() for warning in result.warnings)
+    finally:
+        fetcher.close()
+
+
+def test_read_timeout_after_partial_body_preserves_prefix() -> None:
+    class PartialTimeoutStream(httpx.SyncByteStream):
+        def __init__(self, request: httpx.Request) -> None:
+            self.request = request
+
+        def __iter__(self):
+            yield (
+                b'<html><head>'
+                b'<meta name="viewport" content="width=device-width">'
+                b'</head><body><a href="/book">Reservar cita</a>'
+            )
+            raise httpx.ReadTimeout("simulated partial read timeout", request=self.request)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        return httpx.Response(
+            200,
+            stream=PartialTimeoutStream(request),
+            headers={"Content-Type": "text/html; charset=utf-8"},
+        )
+
+    fetcher = HttpxFetcher(
+        settings(max_response_bytes=1024),
+        policy=PublicUrlPolicy(resolver),
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        result = fetcher.fetch("https://site.example")
+        assert result.error_code is None
+        assert result.http_status == 200
+        assert "viewport" in result.body
+        assert result.warnings
+        assert any("timeout" in warning.lower() for warning in result.warnings)
+    finally:
+        fetcher.close()
