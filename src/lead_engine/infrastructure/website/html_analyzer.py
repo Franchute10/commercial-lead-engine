@@ -4,6 +4,7 @@ import re
 from urllib.parse import parse_qs, urljoin, urlsplit
 
 from bs4 import BeautifulSoup
+from bs4.element import Tag
 from pydantic import JsonValue
 
 from lead_engine.application.website import HtmlAnalysis
@@ -75,6 +76,13 @@ EVENT_CONTEXT_PATTERN = re.compile(
     r"entrega|event|meeting|conference|workshop|launch|delivery)\b",
     re.IGNORECASE,
 )
+ADDRESS_LABELS = {"direccion", "ubicacion", "address", "location"}
+ADDRESS_PATTERN = re.compile(
+    r"\b(?:Av\.?|Avenida|Calle|Jr\.?|Jiron|Street|St\.?|Road|Rd\.?)\s+"
+    r"[\w\s.,-]{2,60}?\b\d{1,5}\b|"
+    r"\b\d{1,5}\s+[\w\s.,-]{1,50}\b(?:Street|St\.?|Road|Rd\.?)",
+    re.IGNORECASE,
+)
 
 
 def is_host(host: str, domain: str) -> bool:
@@ -123,6 +131,24 @@ def find_business_hours(text: str) -> str | None:
         if EVENT_CONTEXT_PATTERN.search(context):
             continue
         return text[schedule.start() : time_range.end()]
+    return None
+
+
+def find_labeled_address_evidence(soup: BeautifulSoup) -> str | None:
+    for label in soup.find_all(["strong", "b", "span", "h2", "h3", "h4", "dt", "label"]):
+        if normalize_name(label.get_text(" ", strip=True)) not in ADDRESS_LABELS:
+            continue
+        nearby_parts: list[str] = []
+        for index, sibling in enumerate(label.next_siblings):
+            if index >= 3:
+                break
+            if isinstance(sibling, Tag):
+                nearby_parts.append(sibling.get_text(" ", strip=True))
+            else:
+                nearby_parts.append(str(sibling).strip())
+        match = ADDRESS_PATTERN.search(" ".join(part for part in nearby_parts if part))
+        if match:
+            return match.group(0).strip()
     return None
 
 
@@ -420,24 +446,21 @@ class BeautifulSoupHtmlAnalyzer:
                 )
         body_text = soup.get_text(" ", strip=True)
         address = soup.find("address")
-        match = re.search(
-            r"\b(?:Av\.?|Avenida|Calle|Jr\.?|Jiron|Street|St\.|Road|Rd\.)\s+[\w\s.,-]{2,60}\b\d{1,5}\b",
-            body_text,
-            re.I,
-        )
         if address and address.get_text(strip=True):
             add(
                 FindingType.ADDRESS_PRESENT,
                 "HTML address element contains text",
                 address.get_text(" ", strip=True)[:1000],
             )
-        elif match:
-            add(
-                FindingType.ADDRESS_PRESENT,
-                "Text matches the documented street/number pattern",
-                match.group(0)[:1000],
-                0.7,
-            )
+        else:
+            address_text = find_labeled_address_evidence(soup)
+            if address_text:
+                add(
+                    FindingType.ADDRESS_PRESENT,
+                    "Address-like text appears beside an explicit address/location label",
+                    address_text[:1000],
+                    0.7,
+                )
         hours = find_business_hours(body_text)
         if hours:
             add(

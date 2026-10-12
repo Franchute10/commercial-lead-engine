@@ -162,6 +162,46 @@ def test_booking_cta_requires_actionable_anchor_destination(markup: str, expecte
 
 
 @pytest.mark.parametrize(
+    "html",
+    [
+        "<address>Av. Balta 123, Chiclayo</address>",
+        "<div><strong>Dirección</strong><span>Av. Balta 123, Chiclayo</span></div>",
+        "<div><strong>Direccion</strong><span>Calle Los Pinos 456</span></div>",
+        "<section><h3>Ubicación</h3><p>Jr. Lima 789</p></section>",
+        "<div><span>Address</span><p>123 Main Street</p></div>",
+        "<div><span>Location</span><p>45 Oak Road</p></div>",
+        "<h1>Centro Médico Chiclayo</h1><div><strong>Dirección</strong>"
+        "<p>Av. Balta 456, Chiclayo</p></div>",
+    ],
+)
+def test_address_evidence_requires_semantic_or_labeled_context(html: str) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(html, "https://site.example/")
+    finding = next(item for item in analysis.findings if item.kind == FindingType.ADDRESS_PRESENT)
+    assert isinstance(finding.value, str)
+    assert finding.value
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        "<p>Nuestra sede de Miraflores está en Av. Pardo 123.</p>",
+        "<p>Av. Pardo 123 corresponde a otra sucursal.</p>",
+        "<div><h2>Nuestras sedes</h2><p>Miraflores: Av. Pardo 123, Lima</p>"
+        "<p>San Isidro: Calle Las Begonias 456, Lima</p></div>",
+        "<footer>Av. Pardo 123, Miraflores, Lima</footer>",
+        "<div hidden><address>Av. Balta 123, Chiclayo</address></div>",
+        '<div aria-hidden="true"><address>Calle Lima 123</address></div>',
+        "<script>Av. Pardo 123</script><template>Calle Lima 456</template>",
+        "<h1>Centro Médico Chiclayo</h1><p>También atendemos en Miraflores: "
+        "Av. Pardo 123, Lima.</p>",
+    ],
+)
+def test_address_evidence_ignores_unlabeled_or_hidden_locations(html: str) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(html, "https://site.example/")
+    assert FindingType.ADDRESS_PRESENT not in {item.kind for item in analysis.findings}
+
+
+@pytest.mark.parametrize(
     ("markup", "expected"),
     [
         ('<a href="/cotizar">Cotizar</a>', True),
