@@ -35,6 +35,16 @@ EDITORIAL_PATH_PREFIXES = {
     "post",
     "posts",
 }
+BOOKING_NON_ACTION_PATHS = {
+    "about",
+    "about-us",
+    "nosotros",
+    "us",
+    "help",
+    "privacy",
+    "terms",
+    "careers",
+}
 PROVIDERS = (
     "opentable.com",
     "sevenrooms.com",
@@ -78,6 +88,16 @@ def is_concrete_social_link(host: str, path: str, domain: str) -> bool:
 def is_editorial_path(path: str) -> bool:
     first_segment = path.strip("/").split("/", maxsplit=1)[0].casefold()
     return first_segment in EDITORIAL_PATH_PREFIXES
+
+
+def is_actionable_booking_target(href: str, scheme: str, hostname: str | None, path: str) -> bool:
+    raw_href = href.strip()
+    if not raw_href or raw_href.startswith("#") or scheme.lower() not in {"http", "https"}:
+        return False
+    if not hostname or is_editorial_path(path):
+        return False
+    first_segment = path.strip("/").split("/", maxsplit=1)[0].casefold()
+    return first_segment not in BOOKING_NON_ACTION_PATHS
 
 
 def find_business_hours(text: str) -> str | None:
@@ -254,8 +274,19 @@ class BeautifulSoupHtmlAnalyzer:
             booking_action = text
             if element.name == "a" and href:
                 booking_action = (
-                    "" if is_editorial_path(target.path) else booking_action + " " + target.path
+                    ""
+                    if (
+                        not is_actionable_booking_target(
+                            href, target.scheme, target.hostname, target.path
+                        )
+                        or is_concrete_whatsapp_link(
+                            href, host, target.scheme, target.path, target.query
+                        )
+                    )
+                    else booking_action + " " + target.path
                 )
+            elif element.name == "a":
+                booking_action = ""
             booking_action = normalize_name(booking_action)
             quote_action = text
             if element.name == "a" and href:

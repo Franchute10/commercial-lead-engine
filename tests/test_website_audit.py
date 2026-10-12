@@ -125,6 +125,45 @@ def test_booking_cta_excludes_editorial_links(markup: str, expected: bool) -> No
 @pytest.mark.parametrize(
     ("markup", "expected"),
     [
+        ('<a href="/reservar">Reserva ahora</a>', True),
+        ('<a href="/reservar/consulta">Reservar consulta</a>', True),
+        ('<a href="/booking">Book now</a>', True),
+        ('<a href="/booking/appointment">Book appointment</a>', True),
+        ('<a href="/citas">Solicitar cita</a>', True),
+        ('<a href="/agenda">Agendar</a>', True),
+        ('<a href="/contacto">Solicitar cita</a>', True),
+        ('<a href="/contact">Book now</a>', True),
+        ('<a href="https://booking.example/reserve">Reserva</a>', True),
+        ('<a href="javascript:void(0)">Haz una reserva</a>', False),
+        ('<a href="javascript:;">Reservar</a>', False),
+        ('<a href="#">Reservar</a>', False),
+        ('<a href="#reservas">Reservar</a>', False),
+        ('<a href="data:text/plain,reserva">Reservar</a>', False),
+        ('<a href="mailto:reservas@example.com">Reservar</a>', False),
+        ('<a href="tel:+51123456789">Reservar</a>', False),
+        ('<a href="https://wa.me/51123456789">Reservar</a>', False),
+        ('<a href="">Reservar</a>', False),
+        ('<a href="/about-us/">Solicitar cita</a>', False),
+        ('<a href="/about">Book now</a>', False),
+        ('<a href="/nosotros">Reservar</a>', False),
+        ('<a href="/help">Reservar</a>', False),
+        ('<a href="/privacy">Book now</a>', False),
+        ('<a href="/terms">Reservar</a>', False),
+        ('<a href="/careers">Solicitar cita</a>', False),
+        ("<button>Reservar</button>", True),
+        ('<input type="submit" value="Agendar">', True),
+    ],
+)
+def test_booking_cta_requires_actionable_anchor_destination(markup: str, expected: bool) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(markup, "https://site.example/")
+    kinds = {item.kind for item in analysis.findings}
+    assert (FindingType.BOOKING_CTA_PRESENT in kinds) is expected
+    assert (FindingType.HAS_RESERVATION_PATH in kinds) is expected
+
+
+@pytest.mark.parametrize(
+    ("markup", "expected"),
+    [
         ('<a href="/cotizar">Cotizar</a>', True),
         ('<a href="/cotizacion">Solicitar cotización</a>', True),
         ("<button>Cotizar ahora</button>", True),
