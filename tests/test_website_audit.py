@@ -295,6 +295,38 @@ def test_map_links_require_concrete_location_resources(href: str, expected: bool
 
 
 @pytest.mark.parametrize(
+    ("html", "expected"),
+    [
+        ("<p>Horario: lunes 09:00 - 18:00</p>", True),
+        ("<p>Horario de atención: Lun - Vie 09:00 - 18:00</p>", True),
+        ("<p>Hours: Monday 9:00 AM - 6:00 PM</p>", True),
+        ("<p>Business hours: Mon-Fri 09:00-18:00</p>", True),
+        ("<p>Lunes a viernes: 09:00 - 18:00</p>", True),
+        ("<p>Mon-Fri: 9:00 AM - 6:00 PM</p>", True),
+        ("<p>La charla será el lunes de 09:00 - 11:00</p>", False),
+        ("<p>Nuestro webinar del Monday será 10:00 AM - 11:00 AM</p>", False),
+        ("<p>Evento lunes 18:00 - 20:00</p>", False),
+        ("<p>Entrega programada para lunes 09:00 - 10:00</p>", False),
+        ("<p>Meeting Monday 09:00 - 10:00</p>", False),
+        ("<p>Workshop Mon-Fri 09:00 - 18:00</p>", False),
+        ("<p>Lunes a viernes 09:00 - 18:00. Horario del webinar</p>", False),
+        ("<p hidden>Horario: lunes 09:00 - 18:00</p>", False),
+        ('<p aria-hidden="true">Hours: Monday 9:00 AM - 6:00 PM</p>', False),
+        ("<script>Horario: lunes 09:00 - 18:00</script>", False),
+        ("<template>Business hours: Mon-Fri 09:00-18:00</template>", False),
+        (
+            "<p>Evento martes 10:00 - 11:00</p><p>Horario de atención: lunes 09:00 - 18:00</p>",
+            True,
+        ),
+    ],
+)
+def test_business_hours_require_schedule_context(html: str, expected: bool) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(html, "https://site.example/")
+    kinds = {item.kind for item in analysis.findings}
+    assert (FindingType.BUSINESS_HOURS_PRESENT in kinds) is expected
+
+
+@pytest.mark.parametrize(
     ("url", "platform"),
     [
         ("https://facebook.com/", None),

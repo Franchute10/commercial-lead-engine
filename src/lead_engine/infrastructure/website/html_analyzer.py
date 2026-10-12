@@ -30,6 +30,26 @@ PROVIDERS = (
 )
 PROVIDER_SYSTEM_PATHS = {"about", "help", "privacy", "terms", "login", "signup", "careers"}
 MAP_SYSTEM_PATHS = {"about", "help", "privacy", "terms", "login"}
+DAY_NAME = (
+    r"(?:monday|mon|tuesday|tue|wednesday|wed|thursday|thu|friday|fri|"
+    r"saturday|sat|sunday|sun|lunes|lun|martes|mar|miercoles|miércoles|mie|"
+    r"jueves|jue|viernes|vie|sabado|sábado|sab|domingo|dom)"
+)
+DAY_PATTERN = re.compile(rf"\b{DAY_NAME}\b", re.IGNORECASE)
+DAY_RANGE_PATTERN = re.compile(rf"\b{DAY_NAME}\s*(?:a|hasta|to|-|–)\s*{DAY_NAME}\b", re.IGNORECASE)
+TIME_RANGE_PATTERN = re.compile(
+    r"\b\d{1,2}:\d{2}\s*(?:am|pm)?\s*(?:-|–|—|a|to)\s*"
+    r"\d{1,2}:\d{2}\s*(?:am|pm)?\b",
+    re.IGNORECASE,
+)
+HOURS_LABEL_PATTERN = re.compile(
+    r"\b(?:horario(?:\s+de\s+atenci[oó]n)?|business\s+hours|hours)\b", re.IGNORECASE
+)
+EVENT_CONTEXT_PATTERN = re.compile(
+    r"\b(?:evento|webinar|charla|reuni[oó]n|cita|conferencia|taller|lanzamiento|"
+    r"entrega|event|meeting|conference|workshop|launch|delivery)\b",
+    re.IGNORECASE,
+)
 
 
 def is_host(host: str, domain: str) -> bool:
@@ -38,6 +58,32 @@ def is_host(host: str, domain: str) -> bool:
 
 def is_concrete_social_link(host: str, path: str, domain: str) -> bool:
     return is_host(host, domain) and bool(path.strip("/"))
+
+
+def find_business_hours(text: str) -> str | None:
+    for label in HOURS_LABEL_PATTERN.finditer(text):
+        window_end = min(len(text), label.end() + 100)
+        window = text[label.end() : window_end]
+        schedule = re.search(
+            rf"{DAY_PATTERN.pattern}[\s\S]{{0,40}}?{TIME_RANGE_PATTERN.pattern}",
+            window,
+            re.IGNORECASE,
+        )
+        if schedule:
+            return schedule.group(0)
+
+    for schedule in DAY_RANGE_PATTERN.finditer(text):
+        window_end = min(len(text), schedule.end() + 40)
+        time_range = TIME_RANGE_PATTERN.search(text, schedule.end(), window_end)
+        if time_range is None:
+            continue
+        context_start = max(0, schedule.start() - 60)
+        context_end = min(len(text), time_range.end() + 40)
+        context = text[context_start:context_end]
+        if EVENT_CONTEXT_PATTERN.search(context):
+            continue
+        return text[schedule.start() : time_range.end()]
+    return None
 
 
 def is_concrete_reservation_provider_link(host: str, path: str, domain: str) -> bool:
@@ -311,16 +357,12 @@ class BeautifulSoupHtmlAnalyzer:
                 match.group(0)[:1000],
                 0.7,
             )
-        hours = re.search(
-            r"(?:horario|hours|lunes|monday|mon|lun)[\w\s:.,-]{0,60}\d{1,2}:\d{2}\s*(?:am|pm)?\s*[-–a]+\s*\d{1,2}:\d{2}",
-            body_text,
-            re.I,
-        )
+        hours = find_business_hours(body_text)
         if hours:
             add(
                 FindingType.BUSINESS_HOURS_PRESENT,
-                "Text matches a day/hours label plus time range",
-                hours.group(0)[:1000],
+                "Visible text is consistent with a business-hours schedule",
+                hours[:1000],
                 0.7,
             )
         kinds = findings.keys()
