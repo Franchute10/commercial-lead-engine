@@ -122,6 +122,43 @@ def test_booking_cta_excludes_editorial_links(markup: str, expected: bool) -> No
     assert (FindingType.HAS_RESERVATION_PATH in kinds) is expected
 
 
+@pytest.mark.parametrize(
+    ("markup", "expected"),
+    [
+        ('<a href="/cotizar">Cotizar</a>', True),
+        ('<a href="/cotizacion">Solicitar cotización</a>', True),
+        ("<button>Cotizar ahora</button>", True),
+        ("<button>Solicita una cotización</button>", True),
+        ("<button>Request a quote</button>", True),
+        ('<a href="/quote">Get a quote</a>', True),
+        ('<input type="submit" value="Cotizar">', True),
+        ('<a href="/cotizar">Continuar</a>', True),
+        ('<a href="/cotizacion">Ver formulario</a>', True),
+        ('<a href="/quote">Continue</a>', True),
+        ('<a href="/request-quote">Continue</a>', True),
+        ('<a href="/blog/como-cotizar-un-proyecto">Continue</a>', False),
+        ('<a href="/blog/cotizacion-materiales">Continue</a>', False),
+        ('<a href="/news/nueva-politica-de-cotizaciones">Continue</a>', False),
+        ('<a href="/news/cotizaciones">Continue</a>', False),
+        ('<a href="/article/request-a-quote-best-practices">Continue</a>', False),
+        ('<a href="/insights/quotation-process">Continue</a>', False),
+        ('<a href="/posts/how-to-quote-projects">Continue</a>', False),
+        ('<a href="/blog/guia-cotizaciones">Guía de cotizaciones</a>', False),
+        ('<a href="/article/quote-guide">Quote guide</a>', False),
+        ('<a href="/insights/quotation-tips">Quotation tips</a>', False),
+        ('<a href="/articles/request-quote">Learn how to request a quote</a>', False),
+        ('<a href="/blog/cotizar">Cotizar ahora</a>', False),
+        ('<a href="/booking">Book now</a>', False),
+        ("<button>Add to cart</button>", False),
+    ],
+)
+def test_quote_cta_excludes_editorial_links(markup: str, expected: bool) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(markup, "https://site.example/")
+    kinds = {item.kind for item in analysis.findings}
+    assert (FindingType.QUOTE_CTA_PRESENT in kinds) is expected
+    assert (FindingType.HAS_QUOTE_PATH in kinds) is expected
+
+
 def test_contact_and_catalog_signals() -> None:
     analyzer = BeautifulSoupHtmlAnalyzer()
     contact = analyzer.analyze(

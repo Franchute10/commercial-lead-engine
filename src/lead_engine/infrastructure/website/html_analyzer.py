@@ -252,6 +252,12 @@ class BeautifulSoupHtmlAnalyzer:
                     "" if is_editorial_path(target.path) else booking_action + " " + target.path
                 )
             booking_action = normalize_name(booking_action)
+            quote_action = text
+            if element.name == "a" and href:
+                quote_action = (
+                    "" if is_editorial_path(target.path) else quote_action + " " + target.path
+                )
+            quote_action = normalize_name(quote_action)
             if has_concrete_tel_target(href):
                 add(FindingType.PHONE_LINK_PRESENT, "HTML contains a tel link", href[:1000])
             if has_concrete_mailto_target(href):
@@ -299,7 +305,7 @@ class BeautifulSoupHtmlAnalyzer:
                 (
                     QUOTE,
                     FindingType.QUOTE_CTA_PRESENT,
-                    "Action text/path matches an ES/EN quote keyword",
+                    "CTA text or non-editorial path matches an ES/EN quote keyword",
                 ),
                 (
                     ECOMMERCE,
@@ -307,7 +313,11 @@ class BeautifulSoupHtmlAnalyzer:
                     "Action text/path matches a cart/checkout/purchase keyword",
                 ),
             ):
-                candidate = booking_action if kind == FindingType.BOOKING_CTA_PRESENT else action
+                candidate = action
+                if kind == FindingType.BOOKING_CTA_PRESENT:
+                    candidate = booking_action
+                elif kind == FindingType.QUOTE_CTA_PRESENT:
+                    candidate = quote_action
                 if element.name != "iframe" and re.search(pattern, candidate):
                     add(kind, description, {"text": text[:500], "href": href[:500]}, 0.9)
             # Page/path signals require a link, not an incidental word in a paragraph/button.
