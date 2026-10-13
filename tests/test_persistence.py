@@ -101,6 +101,39 @@ def test_full_round_trip_and_campaign_status_listing(engine: Engine) -> None:
         assert service.list_leads(campaign.id, LeadStatus.WON) == []
 
 
+def test_campaign_profile_and_structured_targeting_round_trip(engine: Engine) -> None:
+    campaign = Campaign(
+        name="Health Chiclayo",
+        campaign_type=CampaignType.HEALTH,
+        country="Peru",
+        region="Lambayeque",
+        city="Chiclayo",
+        industry="private clinics",
+        subindustry="diagnostics",
+    )
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        service = LeadService(uow)
+        created = service.create_campaign(campaign)
+        uow.commit()
+        assert created.profile_id == "health-v1"
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        loaded = uow.repository.get(Campaign, campaign.id)
+        listed = uow.repository.list(Campaign, profile_id="health-v1")
+    assert loaded == campaign
+    assert listed == [campaign]
+
+
+def test_legacy_campaign_creation_persists_canonical_profile(engine: Engine) -> None:
+    campaign = Campaign(name="Legacy Health", campaign_type=CampaignType.HEALTH)
+    assert campaign.profile_id == "health-v1"
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        LeadService(uow).create_campaign(campaign)
+        uow.commit()
+    with SqlAlchemyUnitOfWork(engine) as uow:
+        loaded = uow.repository.get(Campaign, campaign.id)
+    assert loaded is not None and loaded.profile_id == "health-v1"
+
+
 @pytest.mark.parametrize("signal", ["domain", "legal", "name"])
 def test_deterministic_deduplication(engine: Engine, signal: str) -> None:
     kwargs: dict[str, object] = {

@@ -50,6 +50,32 @@ def test_csv_utf8_optional_columns_and_line_provenance(tmp_path: Path) -> None:
     assert items[0].to_company().country == "Peru"
 
 
+def test_discovery_query_from_persisted_campaign_targeting() -> None:
+    from lead_engine.application.discovery import discovery_query_for_campaign
+
+    value = Campaign(
+        name="Health Chiclayo",
+        campaign_type=CampaignType.HEALTH,
+        country="Peru",
+        region="Lambayeque",
+        city="Chiclayo",
+        industry="private clinics",
+        subindustry="diagnostics",
+    )
+    query = discovery_query_for_campaign(value)
+    assert query.campaign_id == value.id
+    assert (query.country, query.region, query.city, query.industry, query.subindustry) == (
+        "Peru",
+        "Lambayeque",
+        "Chiclayo",
+        "private clinics",
+        "diagnostics",
+    )
+    lima = discovery_query_for_campaign(value.model_copy(update={"city": "Lima"}))
+    assert lima.city == "Lima"
+    assert value.profile_id == "health-v1"
+
+
 def test_minimal_row_has_no_invented_country(tmp_path: Path) -> None:
     path = tmp_path / "minimal.csv"
     path.write_text("name\nIncomplete Clinic\n", encoding="utf-8")
@@ -350,7 +376,7 @@ def test_migration_from_previous_schema_preserves_companies(database_url: str) -
             company = LeadService(uow).upsert_company(Company(canonical_name="Keep me"))
             uow.commit()
         upgrade_database(database_url)
-        assert database_revision(engine) == "0009"
+        assert database_revision(engine) == "0010"
         assert "discovery_runs" in inspect(engine).get_table_names()
         with SqlAlchemyUnitOfWork(engine) as uow:
             assert uow.repository.get(Company, company.id) == company

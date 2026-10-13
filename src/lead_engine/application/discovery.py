@@ -8,9 +8,14 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue
 
 from lead_engine.application.ports import UnitOfWork
-from lead_engine.domain.campaign_profiles import CampaignConfiguration, CampaignProfile
+from lead_engine.domain.campaign_profiles import (
+    CampaignConfiguration,
+    CampaignGeography,
+    CampaignProfile,
+    get_campaign_profile,
+)
 from lead_engine.domain.enums import SourceType
-from lead_engine.domain.models import Company, utc_now
+from lead_engine.domain.models import Campaign, Company, utc_now
 
 
 class DiscoveryQuery(BaseModel):
@@ -20,6 +25,7 @@ class DiscoveryQuery(BaseModel):
     industry: str | None = None
     city: str | None = None
     region: str | None = None
+    subindustry: str | None = None
     query_text: str | None = None
     limit: Annotated[int, Field(ge=1, le=10000)] = 1000
 
@@ -43,6 +49,39 @@ def discovery_query_for_profile(
         region=geography.region or profile.default_region,
         city=geography.city or profile.default_city,
         industry=configuration.industry or profile.default_industry,
+        subindustry=configuration.subindustry,
+        query_text=query_text,
+        limit=limit,
+    )
+
+
+def campaign_configuration(campaign: Campaign) -> CampaignConfiguration:
+    """Copy structured campaign targeting without parsing legacy geography text."""
+
+    return CampaignConfiguration(
+        profile_id=campaign.profile_id,
+        geography=CampaignGeography(
+            country=campaign.country,
+            region=campaign.region,
+            city=campaign.city,
+        ),
+        industry=campaign.industry,
+        subindustry=campaign.subindustry,
+    )
+
+
+def discovery_query_for_campaign(
+    campaign: Campaign,
+    *,
+    query_text: str | None = None,
+    limit: int = 1000,
+) -> DiscoveryQuery:
+    """Create a query from a persisted campaign's profile and structured targeting."""
+
+    return discovery_query_for_profile(
+        campaign.id,
+        get_campaign_profile(campaign.profile_id),
+        campaign_configuration(campaign),
         query_text=query_text,
         limit=limit,
     )

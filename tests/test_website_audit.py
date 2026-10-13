@@ -952,10 +952,44 @@ def test_migration_preserves_existing_evidence_and_score_associations(
         writer = LeadService(uow)
         stored = writer.upsert_company(Company(canonical_name="Existing"))
         source = writer.add_source(Source(source_type=SourceType.MANUAL))
-        context = writer.create_campaign(
-            Campaign(name="Existing", campaign_type=CampaignType.HEALTH)
+        context = Campaign(name="Existing", campaign_type=CampaignType.HEALTH)
+        uow.repository.session.execute(
+            text(
+                "INSERT INTO campaigns "
+                "(id, name, campaign_type, description, geography, active, created_at, updated_at) "
+                "VALUES (:id, :name, :kind, :description, :geography, :active, :created, :updated)"
+            ),
+            {
+                "id": context.id.hex,
+                "name": context.name,
+                "kind": context.campaign_type.value,
+                "description": context.description,
+                "geography": context.geography,
+                "active": int(context.active),
+                "created": context.created_at.isoformat(),
+                "updated": context.updated_at.isoformat(),
+            },
         )
-        lead = writer.create_lead(Lead(company_id=stored.id, campaign_id=context.id))
+        lead = Lead(company_id=stored.id, campaign_id=context.id)
+        uow.repository.session.execute(
+            text(
+                "INSERT INTO leads "
+                "(id, company_id, campaign_id, status, priority, "
+                "assigned_at, created_at, updated_at) "
+                "VALUES (:id, :company, :campaign, :status, :priority, "
+                ":assigned, :created, :updated)"
+            ),
+            {
+                "id": lead.id.hex,
+                "company": stored.id.hex,
+                "campaign": context.id.hex,
+                "status": lead.status.value,
+                "priority": lead.priority,
+                "assigned": None,
+                "created": lead.created_at.isoformat(),
+                "updated": lead.updated_at.isoformat(),
+            },
+        )
         # Old schema has no website_audit_id; insert its historical record explicitly.
         uow.repository.session.execute(
             text(

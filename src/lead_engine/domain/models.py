@@ -136,9 +136,52 @@ class Evidence(Entity):
 class Campaign(Timestamped):
     name: Text
     campaign_type: CampaignType
+    profile_id: str = ""
     description: Text | None = None
     geography: Text | None = None
+    country: Text | None = None
+    region: Text | None = None
+    city: Text | None = None
+    industry: Text | None = None
+    subindustry: Text | None = None
     active: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_and_validate_profile(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        kind_value = data.get("campaign_type")
+        try:
+            if isinstance(kind_value, CampaignType):
+                kind = kind_value
+            elif isinstance(kind_value, str):
+                kind = CampaignType(kind_value)
+            else:
+                return value
+        except (TypeError, ValueError):
+            return value
+
+        from lead_engine.domain.campaign_profiles import (
+            get_campaign_profile,
+            profile_for_campaign_type,
+        )
+
+        profile_id = data.get("profile_id")
+        if "profile_id" not in data or profile_id is None:
+            profile = profile_for_campaign_type(kind)
+        else:
+            if not isinstance(profile_id, str):
+                raise ValueError("profile_id must identify a supported campaign profile")
+            try:
+                profile = get_campaign_profile(profile_id.strip())
+            except LookupError as exc:
+                raise ValueError(str(exc)) from exc
+        if profile.campaign_type != kind:
+            raise ValueError("Campaign profile_id must match campaign_type")
+        data["profile_id"] = profile.profile_id
+        return data
 
 
 class Lead(Timestamped):

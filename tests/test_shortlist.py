@@ -846,14 +846,32 @@ def test_shortlist_migration_preserves_existing_briefs(database_url: str) -> Non
     try:
         c = context()
         assert c.brief and c.score
+        with SqlAlchemyUnitOfWork(engine) as uow:
+            uow.repository.add(c.company)
+            uow.commit()
+        legacy_campaign = c.campaign
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "INSERT INTO campaigns "
+                "(id, name, campaign_type, description, geography, active, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    legacy_campaign.id.hex,
+                    legacy_campaign.name,
+                    legacy_campaign.campaign_type.value,
+                    legacy_campaign.description,
+                    legacy_campaign.geography,
+                    int(legacy_campaign.active),
+                    legacy_campaign.created_at.isoformat(),
+                    legacy_campaign.updated_at.isoformat(),
+                ),
+            )
         source_id = c.evidence[0].source_id
         source = Source(
             id=source_id, source_type=SourceType.WEBSITE, url="https://business.example/team"
         )
         with SqlAlchemyUnitOfWork(engine) as uow:
             for entity in (
-                c.company,
-                c.campaign,
                 c.lead,
                 source,
                 *c.evidence,
@@ -864,7 +882,7 @@ def test_shortlist_migration_preserves_existing_briefs(database_url: str) -> Non
                 uow.repository.add(entity)
             uow.commit()
         upgrade_database(database_url)
-        assert database_revision(engine) == "0009"
+        assert database_revision(engine) == "0010"
         command.downgrade(migration_config(database_url), "0005")
         with SqlAlchemyUnitOfWork(engine) as uow:
             assert uow.repository.get(CommercialBrief, c.brief.id) == c.brief

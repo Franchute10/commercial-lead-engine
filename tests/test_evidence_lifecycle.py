@@ -183,7 +183,7 @@ def test_evidence_cli_and_additive_migration(tmp_path: Path) -> None:
             uow.repository.add(entity)
         uow.commit()
     upgrade_database(url)
-    assert database_revision(engine) == "0009"
+    assert database_revision(engine) == "0010"
     with engine.connect() as connection:
         assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
     runner = CliRunner()

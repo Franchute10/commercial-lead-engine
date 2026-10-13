@@ -50,7 +50,73 @@ def test_profiles_are_immutable_and_unknown_ids_fail_clearly() -> None:
 )
 def test_campaign_type_compatibility(kind: CampaignType, profile_id: str) -> None:
     assert profile_for_campaign_type(kind).profile_id == profile_id
-    assert Campaign(name="Existing", campaign_type=kind).campaign_type == kind
+    campaign = Campaign(name="Existing", campaign_type=kind)
+    assert campaign.campaign_type == kind
+    assert campaign.profile_id == profile_id
+
+
+def test_campaign_profile_and_type_must_match() -> None:
+    assert (
+        Campaign(
+            name="Health", campaign_type=CampaignType.HEALTH, profile_id="health-v1"
+        ).profile_id
+        == "health-v1"
+    )
+    for profile_id in ("construction-v1", "unknown-v1", " "):
+        with pytest.raises(ValidationError):
+            Campaign(name="Health", campaign_type=CampaignType.HEALTH, profile_id=profile_id)
+
+
+def test_campaign_structured_targeting_is_validated_and_legacy_geography_stays_free_text() -> None:
+    campaign = Campaign(
+        name="Health",
+        campaign_type=CampaignType.HEALTH,
+        geography="Chiclayo, Lambayeque, Peru",
+        country="Peru",
+        region="Lambayeque",
+        city="Chiclayo",
+        industry="private clinics",
+        subindustry="diagnostics",
+    )
+    assert campaign.country == "Peru"
+    assert campaign.city == "Chiclayo"
+    assert campaign.industry == "private clinics"
+    assert campaign.subindustry == "diagnostics"
+    assert campaign.geography == "Chiclayo, Lambayeque, Peru"
+    with pytest.raises(ValidationError):
+        Campaign(name="Health", campaign_type=CampaignType.HEALTH, city="  ")
+
+
+def test_campaign_configuration_uses_structured_fields_only() -> None:
+    from lead_engine.application.discovery import campaign_configuration
+
+    campaign = Campaign(
+        name="Health",
+        campaign_type=CampaignType.HEALTH,
+        geography="Chiclayo, Lambayeque, Peru",
+        country="Peru",
+        region="Lambayeque",
+        city="Chiclayo",
+        industry="private clinics",
+        subindustry="diagnostics",
+    )
+    configuration = campaign_configuration(campaign)
+    assert configuration.profile_id == "health-v1"
+    assert configuration.geography.model_dump() == {
+        "country": "Peru",
+        "region": "Lambayeque",
+        "city": "Chiclayo",
+    }
+    assert configuration.industry == "private clinics"
+    assert configuration.subindustry == "diagnostics"
+    legacy = campaign_configuration(
+        Campaign(
+            name="Legacy",
+            campaign_type=CampaignType.HEALTH,
+            geography="Chiclayo, Peru",
+        )
+    )
+    assert legacy.geography.model_dump() == {"country": None, "region": None, "city": None}
 
 
 @pytest.mark.parametrize("profile_id", ["health-v1", "construction-v1", "hospitality-v1"])

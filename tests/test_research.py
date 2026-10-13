@@ -922,9 +922,27 @@ def test_additive_migration_preserves_core_data(database_url: str) -> None:
     try:
         c = context()
         with SqlAlchemyUnitOfWork(engine) as uow:
+            uow.repository.add(c.observations.company)
+            uow.commit()
+        legacy_campaign = c.observations.campaign
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "INSERT INTO campaigns "
+                "(id, name, campaign_type, description, geography, active, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    legacy_campaign.id.hex,
+                    legacy_campaign.name,
+                    legacy_campaign.campaign_type.value,
+                    legacy_campaign.description,
+                    legacy_campaign.geography,
+                    int(legacy_campaign.active),
+                    legacy_campaign.created_at.isoformat(),
+                    legacy_campaign.updated_at.isoformat(),
+                ),
+            )
+        with SqlAlchemyUnitOfWork(engine) as uow:
             for entity in (
-                c.observations.company,
-                c.observations.campaign,
                 c.observations.lead,
                 *c.sources,
                 *c.observations.contacts,
@@ -936,7 +954,7 @@ def test_additive_migration_preserves_core_data(database_url: str) -> None:
             uow.repository.add(c.latest_score)
             uow.commit()
         upgrade_database(database_url)
-        assert database_revision(engine) == "0009"
+        assert database_revision(engine) == "0010"
         command.downgrade(migration_config(database_url), "0004")
         with SqlAlchemyUnitOfWork(engine) as uow:
             assert uow.repository.get(LeadScore, c.latest_score.id) == c.latest_score
