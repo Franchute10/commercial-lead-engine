@@ -13,7 +13,7 @@ from lead_engine.domain.identity import normalize_name
 
 BOOKING = (
     r"\b(reserva|reservar|reservas|reservation|reservations|book|booking|"
-    r"cita|citas|agenda|agendar)\b"
+    r"appointments?|cita|citas|agenda|agendar)\b"
 )
 QUOTE = r"\b(cotiza|cotizar|cotizacion|cotizaciones|quote|quotation)\b"
 CATALOG = r"\b(carta|menu|catalogo|catalog)\b"
