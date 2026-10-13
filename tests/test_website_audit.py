@@ -622,6 +622,56 @@ def test_business_hours_require_schedule_context(html: str, expected: bool) -> N
 
 
 @pytest.mark.parametrize(
+    "html",
+    [
+        "<p>Horario de atención: lunes 09:00 - 18:00</p>",
+        "<p>Business hours: Mon-Fri 09:00-18:00</p>",
+        "<div><strong>Horario</strong><p>Lunes a viernes 09:00 - 18:00</p></div>",
+        "<p>Lunes a viernes: 09:00 - 18:00</p>",
+        "<p>Mon-Fri: 9:00 AM - 6:00 PM</p>",
+        "<p>Reserva una cita con nuestros médicos.</p><section>"
+        "<h2>Horario de atención</h2><p>Lunes a viernes 09:00 - 18:00</p></section>",
+        "<section><h2>Horario de atención</h2><p>Lunes a viernes 09:00 - 18:00</p>"
+        "<p>Agenda tu cita.</p></section>",
+    ],
+)
+def test_business_hours_detects_operating_schedules_with_local_context(html: str) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(html, "https://site.example/")
+    assert FindingType.BUSINESS_HOURS_PRESENT in {item.kind for item in analysis.findings}
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        "<div><h3>Dr. Juan Pérez</h3><p>Horario: lunes 09:00 - 12:00</p></div>",
+        "<div><strong>Dra. María López</strong><p>Horario: martes 15:00 - 18:00</p></div>",
+        "<div><h3>Cardiología - Dr. Pérez</h3><p>Horario miércoles 09:00 - 13:00</p></div>",
+        "<p>Horario de consultas: lunes 09:00 - 12:00</p>",
+        "<p>Horario de citas: martes 14:00 - 17:00</p>",
+        "<div><h3>Citas disponibles</h3><p>Horario: lunes 09:00 - 11:00</p></div>",
+        "<div><p>Agenda médica</p><p>Horario: viernes 14:00 - 17:00</p></div>",
+        "<div><h3>Dr. Juan Pérez - Medicina General</h3><p>Horario: lunes 09:00 - 12:00</p></div>",
+    ],
+)
+def test_business_hours_excludes_provider_and_appointment_schedules(html: str) -> None:
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(html, "https://site.example/")
+    assert FindingType.BUSINESS_HOURS_PRESENT not in {item.kind for item in analysis.findings}
+
+
+def test_business_hours_skips_provider_candidate_and_returns_later_operating_hours() -> None:
+    html = (
+        "<section><h3>Dr. Pérez</h3><p>Horario: lunes 09:00 - 12:00</p></section>"
+        "<section><h2>Horario de atención</h2>"
+        "<p>Lunes a viernes 08:00 - 18:00</p></section>"
+    )
+    analysis = BeautifulSoupHtmlAnalyzer().analyze(html, "https://site.example/")
+    finding = next(
+        item for item in analysis.findings if item.kind == FindingType.BUSINESS_HOURS_PRESENT
+    )
+    assert "08:00 - 18:00" in str(finding.value)
+
+
+@pytest.mark.parametrize(
     ("url", "platform"),
     [
         ("https://facebook.com/", None),

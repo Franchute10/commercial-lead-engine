@@ -76,6 +76,11 @@ EVENT_CONTEXT_PATTERN = re.compile(
     r"entrega|event|meeting|conference|workshop|launch|delivery)\b",
     re.IGNORECASE,
 )
+PROVIDER_SCHEDULE_CONTEXT_PATTERN = re.compile(
+    r"\b(?:dr|dra|doctor|doctora|medico|especialista|consultas?|citas?|"
+    r"agenda medica|disponibilidad|physician|specialist|consultations?|"
+    r"appointments?|availability)\b"
+)
 ADDRESS_LABELS = {"direccion", "ubicacion", "address", "location"}
 ADDRESS_PATTERN = re.compile(
     r"\b(?:Av\.?|Avenida|Calle|Jr\.?|Jiron|Street|St\.?|Road|Rd\.?)\s+"
@@ -108,29 +113,67 @@ def is_actionable_booking_target(href: str, scheme: str, hostname: str | None, p
     return first_segment not in BOOKING_NON_ACTION_PATHS
 
 
-def find_business_hours(text: str) -> str | None:
-    for label in HOURS_LABEL_PATTERN.finditer(text):
-        window_end = min(len(text), label.end() + 100)
-        window = text[label.end() : window_end]
-        schedule = re.search(
-            rf"{DAY_PATTERN.pattern}[\s\S]{{0,40}}?{TIME_RANGE_PATTERN.pattern}",
-            window,
-            re.IGNORECASE,
-        )
-        if schedule:
-            return schedule.group(0)
+def find_business_hours(soup: BeautifulSoup) -> str | None:
+    elements = soup.find_all(["p", "div", "section", "article", "li"])
+    for element in sorted(elements, key=lambda item: len(item.get_text(" ", strip=True))):
+        text = element.get_text(" ", strip=True)
+        if not text:
+            continue
+        context_element = element
+        for parent in element.parents:
+            if isinstance(parent, Tag) and parent.name in {"div", "section", "article", "li"}:
+                context_element = parent
+                break
+        context = context_element.get_text(" ", strip=True)
+        element_position = context.find(text)
 
-    for schedule in DAY_RANGE_PATTERN.finditer(text):
-        window_end = min(len(text), schedule.end() + 40)
-        time_range = TIME_RANGE_PATTERN.search(text, schedule.end(), window_end)
-        if time_range is None:
-            continue
-        context_start = max(0, schedule.start() - 60)
-        context_end = min(len(text), time_range.end() + 40)
-        context = text[context_start:context_end]
-        if EVENT_CONTEXT_PATTERN.search(context):
-            continue
-        return text[schedule.start() : time_range.end()]
+        for label in HOURS_LABEL_PATTERN.finditer(text):
+            window_end = min(len(text), label.end() + 100)
+            schedule = re.search(
+                rf"{DAY_PATTERN.pattern}[\s\S]{{0,40}}?{TIME_RANGE_PATTERN.pattern}",
+                text[label.end() : window_end],
+                re.IGNORECASE,
+            )
+            if schedule is None:
+                continue
+            schedule_text = schedule.group(0)
+            context_position = context.find(schedule_text, max(element_position, 0))
+            if context_position < 0:
+                context_position = text.find(schedule_text)
+                local_context = text[
+                    max(0, context_position - 120) : context_position + len(schedule_text)
+                ]
+            else:
+                local_context = context[
+                    max(0, context_position - 120) : context_position + len(schedule_text)
+                ]
+            label_schedule_context = text[label.start() : label.end() + schedule.end()]
+            if EVENT_CONTEXT_PATTERN.search(label_schedule_context) or (
+                PROVIDER_SCHEDULE_CONTEXT_PATTERN.search(normalize_name(local_context))
+            ):
+                continue
+            return schedule_text
+
+        for day_range in DAY_RANGE_PATTERN.finditer(text):
+            window_end = min(len(text), day_range.end() + 40)
+            time_range = TIME_RANGE_PATTERN.search(text, day_range.end(), window_end)
+            if time_range is None:
+                continue
+            schedule_text = text[day_range.start() : time_range.end()]
+            context_position = context.find(schedule_text, max(element_position, 0))
+            if context_position < 0:
+                context_position = text.find(schedule_text)
+                local_context = text[max(0, context_position - 80) : time_range.end() + 40]
+            else:
+                local_context = context[
+                    max(0, context_position - 80) : context_position + len(schedule_text) + 40
+                ]
+            local_normalized = normalize_name(local_context)
+            if EVENT_CONTEXT_PATTERN.search(
+                local_context
+            ) or PROVIDER_SCHEDULE_CONTEXT_PATTERN.search(local_normalized):
+                continue
+            return schedule_text
     return None
 
 
@@ -444,7 +487,6 @@ class BeautifulSoupHtmlAnalyzer:
                     str(form.get("action", ""))[:1000],
                     0.9,
                 )
-        body_text = soup.get_text(" ", strip=True)
         address = soup.find("address")
         if address and address.get_text(strip=True):
             add(
@@ -461,7 +503,7 @@ class BeautifulSoupHtmlAnalyzer:
                     address_text[:1000],
                     0.7,
                 )
-        hours = find_business_hours(body_text)
+        hours = find_business_hours(soup)
         if hours:
             add(
                 FindingType.BUSINESS_HOURS_PRESENT,
