@@ -20,6 +20,12 @@ from lead_engine.domain.enums import CampaignType, RoleCategory, SourceType
 from lead_engine.domain.identity import normalize_name, normalize_url
 from lead_engine.domain.models import Company, Confidence, Entity, Text, utc_now
 
+DEFAULT_TARGET_ROLES = (
+    RoleCategory.MARKETING,
+    RoleCategory.GENERAL_MANAGEMENT,
+    RoleCategory.DIGITAL,
+)
+
 
 class VerificationState(StrEnum):
     UNVERIFIED = "UNVERIFIED"

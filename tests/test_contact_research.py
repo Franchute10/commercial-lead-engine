@@ -13,6 +13,7 @@ from lead_engine.application.contact_research import DecisionMakerResearchServic
 from lead_engine.application.website import FetchResult
 from lead_engine.cli.main import app
 from lead_engine.domain.contact_research import (
+    DEFAULT_TARGET_ROLES,
     ContactCandidate,
     ContactIdentity,
     DecisionMakerResearchRun,
@@ -109,7 +110,7 @@ def test_unverified_not_recommended(engine: Engine, changes: dict[str, object]) 
     company, lead, service = setup(engine)
     service.research(company.id, ManualContactProvider([candidate(company, **changes)]))
     result = service.recommend_contacts(lead.id)
-    assert not result.contacts and result.target_roles
+    assert not result.contacts and result.target_roles == list(DEFAULT_TARGET_ROLES)
 
 
 def test_dedup_history_and_stale(engine: Engine) -> None:

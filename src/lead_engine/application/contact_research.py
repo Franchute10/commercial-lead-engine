@@ -6,6 +6,7 @@ from uuid import UUID
 from lead_engine.application.discovery import UnitOfWorkFactory
 from lead_engine.application.evidence_lifecycle import current_evidence
 from lead_engine.domain.contact_research import (
+    DEFAULT_TARGET_ROLES,
     ContactCandidate,
     ContactDiscoveryProvider,
     ContactIdentity,
@@ -19,7 +20,6 @@ from lead_engine.domain.contact_research import (
     role_points,
     source_reliability,
 )
-from lead_engine.domain.enums import RoleCategory
 from lead_engine.domain.errors import IdentityConflictError, NotFoundError
 from lead_engine.domain.identity import normalize_name
 from lead_engine.domain.models import (
@@ -355,13 +355,7 @@ class DecisionMakerResearchService:
             return RecommendationResult(
                 lead_id=lead_id,
                 contacts=results[:limit],
-                target_roles=[]
-                if results
-                else [
-                    RoleCategory.MARKETING,
-                    RoleCategory.GENERAL_MANAGEMENT,
-                    RoleCategory.DIGITAL,
-                ],
+                target_roles=[] if results else list(DEFAULT_TARGET_ROLES),
                 message="Supported contacts; human review required"
                 if results
                 else "No supported individual contact found",

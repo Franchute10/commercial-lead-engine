@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue
 
 from lead_engine.application.ports import UnitOfWork
+from lead_engine.domain.campaign_profiles import CampaignConfiguration, CampaignProfile
 from lead_engine.domain.enums import SourceType
 from lead_engine.domain.models import Company, utc_now
 
@@ -21,6 +22,30 @@ class DiscoveryQuery(BaseModel):
     region: str | None = None
     query_text: str | None = None
     limit: Annotated[int, Field(ge=1, le=10000)] = 1000
+
+
+def discovery_query_for_profile(
+    campaign_id: UUID,
+    profile: CampaignProfile,
+    configuration: CampaignConfiguration,
+    *,
+    query_text: str | None = None,
+    limit: int = 1000,
+) -> DiscoveryQuery:
+    """Derive provider-neutral query defaults from vertical and campaign data."""
+
+    if configuration.profile_id != profile.profile_id:
+        raise ValueError("Campaign configuration profile_id does not match profile")
+    geography = configuration.geography
+    return DiscoveryQuery(
+        campaign_id=campaign_id,
+        country=geography.country or profile.default_country,
+        region=geography.region or profile.default_region,
+        city=geography.city or profile.default_city,
+        industry=configuration.industry or profile.default_industry,
+        query_text=query_text,
+        limit=limit,
+    )
 
 
 class DiscoveryCandidate(BaseModel):
