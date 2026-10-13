@@ -41,7 +41,12 @@ from lead_engine.domain.research import (
     OpportunityType,
     ResearchContext,
 )
-from lead_engine.domain.research_policies import V1ResearchPolicy, V2ResearchPolicy
+from lead_engine.domain.research_policies import (
+    DEFAULT_RESEARCH_POLICIES,
+    V1ResearchPolicy,
+    V2ResearchPolicy,
+    V3ResearchPolicy,
+)
 from lead_engine.domain.scoring import ScoreBand, ScoringContext
 from lead_engine.infrastructure.repositories import SqlAlchemyRepository, SqlAlchemyUnitOfWork
 
@@ -253,6 +258,189 @@ def test_v2_gmr_alternative_paths_block_customer_journey() -> None:
         for o in brief.secondary_opportunities
     )
     assert brief.opportunity_type == OpportunityType.NO_CLEAR_OPPORTUNITY
+
+
+def test_v3_health_booking_does_not_suppress_direct_contact_gap() -> None:
+    c = context(
+        overrides={
+            "HAS_DIRECT_CONTACT_PATH": False,
+            "HAS_RESERVATION_PATH": True,
+            "BOOKING_CTA_PRESENT": True,
+            "HAS_CONVERSION_CTA": True,
+        }
+    )
+    brief = V3ResearchPolicy(CampaignType.HEALTH).generate(c)
+    opportunity_types = {brief.opportunity_type} | {
+        item.opportunity_type for item in brief.secondary_opportunities
+    }
+    assert OpportunityType.CUSTOMER_JOURNEY in opportunity_types
+    assert OpportunityType.CONTACTABILITY not in opportunity_types
+
+
+def test_v3_preserves_v2_booking_suppression() -> None:
+    c = context(
+        overrides={
+            "HAS_DIRECT_CONTACT_PATH": False,
+            "HAS_RESERVATION_PATH": True,
+            "BOOKING_CTA_PRESENT": True,
+            "HAS_CONVERSION_CTA": True,
+        }
+    )
+    brief = V2ResearchPolicy(CampaignType.HEALTH).generate(c)
+    assert brief.opportunity_type == OpportunityType.NO_CLEAR_OPPORTUNITY
+
+
+def test_v3_booking_path_still_blocks_appointment_conversion_gap() -> None:
+    c = context(
+        overrides={
+            "HAS_RESERVATION_PATH": True,
+            "BOOKING_CTA_PRESENT": False,
+        }
+    )
+    brief = V3ResearchPolicy(CampaignType.HEALTH).generate(c)
+    opportunity_types = {brief.opportunity_type} | {
+        item.opportunity_type for item in brief.secondary_opportunities
+    }
+    assert OpportunityType.APPOINTMENT_CONVERSION not in opportunity_types
+
+
+@pytest.mark.parametrize("direct_contact", [None, True])
+def test_v3_requires_explicit_direct_contact_absence(direct_contact: JsonValue) -> None:
+    overrides: dict[str, JsonValue] = {
+        "HAS_RESERVATION_PATH": True,
+        "BOOKING_CTA_PRESENT": True,
+    }
+    if direct_contact is not None:
+        overrides["HAS_DIRECT_CONTACT_PATH"] = direct_contact
+    brief = V3ResearchPolicy(CampaignType.HEALTH).generate(context(overrides=overrides))
+    opportunity_types = {brief.opportunity_type} | {
+        item.opportunity_type for item in brief.secondary_opportunities
+    }
+    assert OpportunityType.CUSTOMER_JOURNEY not in opportunity_types
+    assert OpportunityType.CONTACTABILITY not in opportunity_types
+
+
+def test_v3_direct_contact_gap_requires_health_anchor() -> None:
+    c = context(
+        rich=False,
+        overrides={
+            "HAS_DIRECT_CONTACT_PATH": False,
+            "HAS_RESERVATION_PATH": True,
+            "BOOKING_CTA_PRESENT": True,
+        },
+    )
+    brief = V3ResearchPolicy(CampaignType.HEALTH).generate(c)
+    assert brief.opportunity_type == OpportunityType.NO_CLEAR_OPPORTUNITY
+
+
+def test_v3_preserves_v2_multi_location_booking_suppression() -> None:
+    c = context(
+        rich=False,
+        overrides={
+            "MULTIPLE_LOCATIONS": True,
+            "HAS_DIRECT_CONTACT_PATH": False,
+            "HAS_RESERVATION_PATH": True,
+            "BOOKING_CTA_PRESENT": True,
+        },
+    )
+    brief = V3ResearchPolicy(CampaignType.HEALTH).generate(c)
+    opportunity_types = {brief.opportunity_type} | {
+        item.opportunity_type for item in brief.secondary_opportunities
+    }
+    assert OpportunityType.MULTI_LOCATION_EXPERIENCE not in opportunity_types
+
+
+def test_v3_static_only_direct_contact_absence_is_provisional() -> None:
+    from dataclasses import replace
+
+    c = context(
+        overrides={
+            "HAS_DIRECT_CONTACT_PATH": False,
+            "HAS_RESERVATION_PATH": True,
+            "BOOKING_CTA_PRESENT": True,
+        }
+    )
+    snapshot = c.observations
+    audit = snapshot.audits[0]
+    evidence = tuple(
+        item for item in snapshot.evidence if item.evidence_type != "HAS_DIRECT_CONTACT_PATH"
+    )
+    coverage = Evidence(
+        company_id=snapshot.company.id,
+        source_id=audit.source_id,
+        website_audit_id=audit.id,
+        evidence_type="WEBSITE_SIGNAL_COVERAGE",
+        statement="Static homepage inspection did not observe a direct contact path",
+        raw_value={"version": "static-homepage-v1", "signals": {"HAS_DIRECT_CONTACT_PATH": False}},
+        confidence=0.9,
+        observed_at=utc_now(),
+    )
+    c = replace(
+        c,
+        observations=replace(snapshot, evidence=evidence + (coverage,), as_of=utc_now()),
+    )
+    brief = V3ResearchPolicy(CampaignType.HEALTH).generate(c)
+    assert brief.opportunity_type == OpportunityType.CUSTOMER_JOURNEY
+    assert brief.status == BriefStatus.PARTIAL
+    assert brief.opportunity_priority == OpportunityPriority.LOW
+    assert any("Corroborate" in note for note in brief.missing_information)
+
+
+def test_v3_independent_contact_evidence_clears_provisional_negative() -> None:
+    from dataclasses import replace
+
+    c = context(
+        overrides={
+            "HAS_DIRECT_CONTACT_PATH": False,
+            "HAS_RESERVATION_PATH": True,
+            "BOOKING_CTA_PRESENT": True,
+        }
+    )
+    snapshot = c.observations
+    corroboration = Evidence(
+        company_id=snapshot.company.id,
+        source_id=c.sources[0].id,
+        evidence_type="HAS_DIRECT_CONTACT_PATH",
+        statement="Manual review independently confirmed no direct contact route",
+        raw_value=False,
+        confidence=0.8,
+        observed_at=utc_now(),
+    )
+    evidence = tuple(
+        item for item in snapshot.evidence if item.evidence_type != "HAS_DIRECT_CONTACT_PATH"
+    )
+    audit = snapshot.audits[0]
+    coverage = Evidence(
+        company_id=snapshot.company.id,
+        source_id=audit.source_id,
+        website_audit_id=audit.id,
+        evidence_type="WEBSITE_SIGNAL_COVERAGE",
+        statement="Static homepage inspection did not observe a direct contact path",
+        raw_value={"version": "static-homepage-v1", "signals": {"HAS_DIRECT_CONTACT_PATH": False}},
+        confidence=0.9,
+        observed_at=utc_now(),
+    )
+    c = replace(
+        c,
+        observations=replace(
+            snapshot,
+            evidence=evidence + (coverage, corroboration),
+            as_of=utc_now(),
+        ),
+    )
+    brief = V3ResearchPolicy(CampaignType.HEALTH).generate(c)
+    assert brief.opportunity_type == OpportunityType.CUSTOMER_JOURNEY
+    assert brief.status == BriefStatus.READY
+    assert brief.opportunity_priority == OpportunityPriority.MEDIUM
+    assert not any("Corroborate" in note for note in brief.missing_information)
+
+
+def test_default_research_policy_versions() -> None:
+    assert isinstance(DEFAULT_RESEARCH_POLICIES[CampaignType.HEALTH], V3ResearchPolicy)
+    assert DEFAULT_RESEARCH_POLICIES[CampaignType.HEALTH].version == "health-research-v3"
+    for kind in (CampaignType.CONSTRUCTION, CampaignType.HOSPITALITY):
+        assert isinstance(DEFAULT_RESEARCH_POLICIES[kind], V2ResearchPolicy)
+        assert DEFAULT_RESEARCH_POLICIES[kind].version == f"{kind.value.lower()}-research-v2"
 
 
 def test_v2_mas_vision_map_link_alone_is_not_local_discovery() -> None:

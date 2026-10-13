@@ -717,6 +717,32 @@ class V2ResearchPolicy(V1ResearchPolicy):
         return False
 
 
+@dataclass(frozen=True)
+class V3ResearchPolicy(V2ResearchPolicy):
+    """HEALTH interpretation that separates direct contact from booking availability."""
+
+    @property
+    def version(self) -> str:
+        return f"{self.campaign_type.value.lower()}-research-v3"
+
+    def allow_rule(self, rule: ResearchRule, fact: "Callable[[str], Fact]") -> bool:
+        if self.campaign_type == CampaignType.HEALTH:
+            direct_contact_absent = fact("HAS_DIRECT_CONTACT_PATH").state == SignalState.ABSENT
+            if rule.kind == OpportunityType.CUSTOMER_JOURNEY and direct_contact_absent:
+                # The explicit direct-contact gap is independent of booking availability.
+                return True
+            if rule.kind == OpportunityType.CONTACTABILITY and direct_contact_absent:
+                customer_journey_anchors = ("HIGH_VALUE_SERVICE", "CORPORATE_CLIENTS")
+                if any(
+                    fact(signal).state == SignalState.PRESENT and fact(signal).value is True
+                    for signal in customer_journey_anchors
+                ):
+                    # Prefer the domain-specific interpretation when it can be supported.
+                    return False
+        return super().allow_rule(rule, fact)
+
+
 DEFAULT_RESEARCH_POLICIES: dict[CampaignType, ResearchPolicy] = {
-    kind: V2ResearchPolicy(kind) for kind in CampaignType
+    kind: V3ResearchPolicy(kind) if kind == CampaignType.HEALTH else V2ResearchPolicy(kind)
+    for kind in CampaignType
 }
