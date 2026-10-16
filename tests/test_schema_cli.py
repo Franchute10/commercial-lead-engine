@@ -27,13 +27,13 @@ def test_migration_empty_database_and_idempotent_upgrade(database_url: str) -> N
     upgrade_database(database_url)
     engine = build_engine(database_url)
     try:
-        assert database_revision(engine) == "0010"
+        assert database_revision(engine) == "0011"
         with engine.connect() as connection:
             assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
         command.downgrade(migration_config(database_url), "base")
         assert inspect(engine).get_table_names() == ["alembic_version"]
         upgrade_database(database_url)
-        assert database_revision(engine) == "0010"
+        assert database_revision(engine) == "0011"
     finally:
         engine.dispose()
 
@@ -47,7 +47,7 @@ def test_cli_database_init_status_and_manual_records(database_url: str) -> None:
     assert runner.invoke(app, ["db", "init", *options]).exit_code == 0
     status = runner.invoke(app, ["db", "status", *options])
     assert status.exit_code == 0, status.output
-    assert "0010" in status.stdout
+    assert "0011" in status.stdout
     add = runner.invoke(
         app, ["company", "add", "--name", "Clinic", "--primary-domain", "clinic.pe", *options]
     )
@@ -64,8 +64,62 @@ def test_cli_database_init_status_and_manual_records(database_url: str) -> None:
         app, ["campaign", "add", "--name", "Health", "--type", "HEALTH", *options]
     )
     assert campaign.exit_code == 0, campaign.output
-    assert json.loads(campaign.stdout)["profile_id"] == "health-v1"
+    campaign_record = json.loads(campaign.stdout)
+    assert campaign_record["profile_id"] == "health-v1"
+    assert campaign_record["sector_id"] is None
+    assert campaign_record["subsector_id"] is None
     assert runner.invoke(app, ["campaign", "list", *options]).exit_code == 0
+
+
+def test_campaign_cli_sector_persistence_and_invalid_sectors_do_not_write(
+    database_url: str,
+) -> None:
+    runner = CliRunner()
+    options = ["--database-url", database_url]
+    assert runner.invoke(app, ["db", "init", *options]).exit_code == 0
+
+    valid = runner.invoke(
+        app,
+        [
+            "campaign",
+            "add",
+            "--name",
+            "Clinics Chiclayo",
+            "--profile",
+            "health-v1",
+            "--sector",
+            "health",
+            "--subsector",
+            "private-clinics",
+            "--industry",
+            "healthcare",
+            "--subindustry",
+            "outpatient clinics",
+            *options,
+        ],
+    )
+    assert valid.exit_code == 0, valid.output
+    valid_record = json.loads(valid.stdout)
+    assert valid_record["sector_id"] == "health"
+    assert valid_record["subsector_id"] == "private-clinics"
+    assert valid_record["industry"] == "healthcare"
+    assert valid_record["subindustry"] == "outpatient clinics"
+
+    for invalid_args in (
+        ["--name", "Logistics Lima", "--profile", "health-v1", "--sector", "logistics-transport"],
+        ["--name", "Mismatched", "--type", "CONSTRUCTION", "--sector", "health"],
+        ["--name", "Bad subsector", "--type", "HEALTH", "--subsector", "private-clinics"],
+        ["--name", "Bad pair", "--type", "HEALTH", "--sector", "health", "--subsector", "hotels"],
+    ):
+        failed = runner.invoke(app, ["campaign", "add", *invalid_args, *options])
+        assert failed.exit_code != 0
+
+    listed = runner.invoke(app, ["campaign", "list", *options])
+    assert listed.exit_code == 0, listed.output
+    records = [json.loads(line) for line in listed.stdout.splitlines()]
+    assert [item["name"] for item in records] == ["Clinics Chiclayo"]
+    assert records[0]["sector_id"] == "health"
+    assert records[0]["subsector_id"] == "private-clinics"
 
 
 def test_campaign_cli_profiles_structured_targeting_and_profile_resolution(

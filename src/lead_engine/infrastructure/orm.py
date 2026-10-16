@@ -157,6 +157,8 @@ class CampaignRow(EntityRow):
     # SQLite cannot safely rebuild this referenced table to make the backfilled column NOT NULL.
     # Domain Campaign requires a resolved profile_id for all application writes.
     profile_id: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    sector_id: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    subsector_id: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     geography: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     country: Mapped[str | None] = mapped_column(String(1000), nullable=True)

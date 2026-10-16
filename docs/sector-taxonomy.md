@@ -1,6 +1,6 @@
 # Economic sector taxonomy
 
-The sector catalog is a small, stable business vocabulary. It is separate from campaign persistence
+The sector catalog is a small, stable business vocabulary. It is independent from campaign profiles
 and does not determine commercial scoring, research, or shortlist policies.
 
 ## Sector, subsector, and campaign profile
@@ -39,8 +39,20 @@ Each output line is a JSON sector record. To list a sector's optional subsectors
 lead-engine campaign subsectors --sector health
 ```
 
-Unknown sector IDs produce an error. This catalog is currently read-only and is not persisted in
-Campaign records.
+Unknown sector IDs produce an error. The catalog is read-only, while a Campaign may persist an
+explicit `sector_id` and optional `subsector_id`. Existing campaigns keep both values null; no
+classification is inferred from profile, industry, subindustry, geography, or campaign name.
+Selected IDs must exist in the catalog, and the selected subsector must belong to the sector.
+
+Explicit sector classification is currently executable only for `health`,
+`construction-real-estate`, and `hospitality-tourism`, whose recommended profiles have been
+validated. The other six remain catalogued but Campaign creation rejects them until a profile is
+validated. The engine does not select a profile by proximity.
+
+```text
+lead-engine campaign add --name "Clínicas Chiclayo" --profile health-v1 --sector health --subsector private-clinics --country Peru --region Lambayeque --city Chiclayo
+lead-engine campaign add --name "Materiales Arequipa" --type CONSTRUCTION --sector construction-real-estate --subsector building-materials --country Peru --city Arequipa
+```
 
 ## Other / Suggest sector
 
@@ -51,8 +63,11 @@ classify arbitrary names automatically.
 For example, a person may explicitly enter “Agroexportación” and map it provisionally to
 `industry-manufacturing` / `agroindustry`. The result preserves the requested name and has
 `PROVISIONAL` status, with no recommended profile unless one is explicitly supplied and valid.
-Unknown or uncertain suggestions require human evaluation. Suggestions are domain values only;
-they are not persisted in this task.
+Unknown or uncertain suggestions require human evaluation. Suggestions remain domain values only;
+they are not persisted.
 
-No scoring, research, shortlist, or CampaignType behavior is changed by this taxonomy. No database
-migration is introduced.
+No scoring, research, shortlist, or `CampaignType` values or policy behavior are changed by this
+taxonomy. `CampaignType` remains a compatibility field that constrains existing policy resolution.
+A future change may resolve policies solely through `profile_id`, allowing the operational
+dependency on `CampaignType` to be retired. Migration `0011` adds nullable classification columns
+without backfilling legacy campaigns.

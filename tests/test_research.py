@@ -954,7 +954,7 @@ def test_additive_migration_preserves_core_data(database_url: str) -> None:
             uow.repository.add(c.latest_score)
             uow.commit()
         upgrade_database(database_url)
-        assert database_revision(engine) == "0010"
+        assert database_revision(engine) == "0011"
         command.downgrade(migration_config(database_url), "0004")
         with SqlAlchemyUnitOfWork(engine) as uow:
             assert uow.repository.get(LeadScore, c.latest_score.id) == c.latest_score

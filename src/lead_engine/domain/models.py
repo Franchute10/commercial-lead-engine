@@ -137,6 +137,8 @@ class Campaign(Timestamped):
     name: Text
     campaign_type: CampaignType
     profile_id: str = ""
+    sector_id: str | None = None
+    subsector_id: str | None = None
     description: Text | None = None
     geography: Text | None = None
     country: Text | None = None
@@ -182,6 +184,39 @@ class Campaign(Timestamped):
             raise ValueError("Campaign profile_id must match campaign_type")
         data["profile_id"] = profile.profile_id
         return data
+
+    @field_validator("sector_id", "subsector_id")
+    @classmethod
+    def nonblank_classification_id(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("sector and subsector IDs must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def validate_sector_classification(self) -> Self:
+        if self.subsector_id is not None and self.sector_id is None:
+            raise ValueError("subsector_id requires sector_id")
+        if self.sector_id is None:
+            return self
+
+        from lead_engine.domain.sectors import get_sector, get_subsector
+
+        try:
+            sector = get_sector(self.sector_id)
+        except LookupError as exc:
+            raise ValueError(str(exc)) from exc
+        if sector.recommended_profile_id is None:
+            raise ValueError("Sector has no validated campaign profile yet.")
+        if self.profile_id != sector.recommended_profile_id:
+            raise ValueError("Campaign profile_id must match the sector's recommended profile")
+        if self.subsector_id is not None:
+            try:
+                subsector = get_subsector(self.subsector_id)
+            except LookupError as exc:
+                raise ValueError(str(exc)) from exc
+            if subsector.sector_id != self.sector_id:
+                raise ValueError("subsector_id must belong to sector_id")
+        return self
 
 
 class Lead(Timestamped):

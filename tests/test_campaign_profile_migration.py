@@ -73,7 +73,7 @@ def test_0009_campaigns_backfill_profile_and_preserve_lead(
         )
 
     command.upgrade(migration_config(database_url), "head")
-    assert database_revision(engine) == "0010"
+    assert database_revision(engine) == "0011"
     with SqlAlchemyUnitOfWork(engine) as uow:
         campaign = uow.repository.get(Campaign, campaign_id)
         lead = uow.repository.get(Lead, lead_id)
@@ -82,6 +82,8 @@ def test_0009_campaigns_backfill_profile_and_preserve_lead(
     assert campaign.campaign_type == campaign_type
     assert campaign.profile_id == profile_id
     assert campaign.geography == "Chiclayo"
+    assert campaign.sector_id is None
+    assert campaign.subsector_id is None
     assert (
         campaign.country,
         campaign.region,
@@ -97,6 +99,8 @@ def test_0009_campaigns_backfill_profile_and_preserve_lead(
         "city",
         "industry",
         "subindustry",
+        "sector_id",
+        "subsector_id",
     } <= campaign_columns
     assert lead is not None and lead.id == lead_id and lead.campaign_id == campaign_id
 

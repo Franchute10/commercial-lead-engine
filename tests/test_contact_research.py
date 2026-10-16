@@ -475,7 +475,7 @@ def test_migration_preserves_existing_contacts(database_url: str) -> None:
             uow.repository.add(contact)
             uow.commit()
         upgrade_database(database_url)
-        assert database_revision(engine) == "0010"
+        assert database_revision(engine) == "0011"
         with SqlAlchemyUnitOfWork(engine) as uow:
             assert uow.repository.get(Contact, contact.id) == contact
         command.downgrade(migration_config(database_url), "0003")

@@ -162,6 +162,8 @@ def campaign_add(
     city: Annotated[str | None, typer.Option("--city")] = None,
     industry: Annotated[str | None, typer.Option("--industry")] = None,
     subindustry: Annotated[str | None, typer.Option("--subindustry")] = None,
+    sector_id: Annotated[str | None, typer.Option("--sector")] = None,
+    subsector_id: Annotated[str | None, typer.Option("--subsector")] = None,
 ) -> None:
     with admin_errors():
         profile = resolve_campaign_profile(profile_id, campaign_type)
@@ -171,6 +173,8 @@ def campaign_add(
                     name=name,
                     campaign_type=profile.campaign_type,
                     profile_id=profile.profile_id,
+                    sector_id=sector_id,
+                    subsector_id=subsector_id,
                     geography=geography,
                     country=country,
                     region=region,

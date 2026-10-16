@@ -33,9 +33,26 @@ lead-engine campaign list
 
 `campaign profiles` prints the three built-in profiles in stable order: `health-v1`,
 `construction-v1`, and `hospitality-v1`. Their policy references describe supported behavior; they
-do not imply support for every sector. For an unsupported sector, use the closest existing profile
-only when its policy is appropriate, and provide the narrower industry and subindustry as targeting
-data. Unknown profiles and mismatched profile/type pairs fail before database writes.
+do not imply support for every sector. Unknown profiles and mismatched profile/type pairs fail
+before database writes.
 
 Campaign targeting is passed to `discovery_query_for_campaign()` for provider-neutral query
 construction. This CLI does not perform discovery.
+
+Campaigns may also store an explicit `sector_id` and optional `subsector_id`, which classify the
+economic category independently from discovery targeting. Legacy campaigns keep both fields null;
+the migration does not infer a sector from `profile_id`, `industry`, `subindustry`, or `geography`.
+At present, a selected sector must recommend the same validated profile as the campaign. Only
+`health`, `construction-real-estate`, and `hospitality-tourism` can be used for executable campaigns;
+the other six catalog sectors have no validated profile and are rejected for campaign creation. Do
+not substitute a different sector's profile; see [the sector taxonomy](sector-taxonomy.md) for the
+classification and profile relationship.
+
+```text
+lead-engine campaign add --name "Clínicas Chiclayo" --profile health-v1 --sector health --subsector private-clinics --country Peru --region Lambayeque --city Chiclayo --industry healthcare --subindustry "outpatient clinics"
+lead-engine campaign add --name "Materiales Arequipa" --type CONSTRUCTION --sector construction-real-estate --subsector building-materials --country Peru --city Arequipa
+```
+
+`campaign_type` remains the compatibility input for current policy resolution. A future policy
+resolution change may depend on `profile_id` alone, allowing that operational dependency to be
+retired without inferring sector classifications for old campaigns.
