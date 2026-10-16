@@ -73,7 +73,7 @@ def test_0009_campaigns_backfill_profile_and_preserve_lead(
         )
 
     command.upgrade(migration_config(database_url), "head")
-    assert database_revision(engine) == "0011"
+    assert database_revision(engine) == "0012"
     with SqlAlchemyUnitOfWork(engine) as uow:
         campaign = uow.repository.get(Campaign, campaign_id)
         lead = uow.repository.get(Lead, lead_id)

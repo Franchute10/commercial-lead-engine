@@ -63,11 +63,31 @@ lead-engine campaign add --name "Materiales Arequipa" --sector construction-real
 represents a request for a category that a human should map and review. The taxonomy does not
 classify arbitrary names automatically.
 
-For example, a person may explicitly enter “Agroexportación” and map it provisionally to
-`industry-manufacturing` / `agroindustry`. The result preserves the requested name and has
-`PROVISIONAL` status, with no recommended profile unless one is explicitly supplied and valid.
-Unknown or uncertain suggestions require human evaluation. Suggestions remain domain values only;
-they are not persisted.
+An **official economic sector** is one of the fixed catalog entries above. A **suggested economic
+activity** is user-submitted intake and may remain unmapped while pending review. A **human-approved
+classification** is a suggestion explicitly accepted with a valid existing sector; acceptance does
+not create an official sector. A **validated executable CampaignProfile** is a separately maintained
+bundle of policies that campaigns may use. Accepting a suggestion does not create a profile or make
+the suggestion executable.
+
+Suggestions are persisted independently from Campaign. The requested name is retained verbatim;
+proposed sector, subsector, and profile IDs are validated when supplied, but no profile is inferred
+from a sector. No human action here mutates the official sector catalog or creates a campaign.
+
+```text
+lead-engine sector-suggestion submit --name "Seguridad electrónica"
+lead-engine sector-suggestion submit --name "Agroexportación" --sector industry-manufacturing --subsector agroindustry
+lead-engine sector-suggestion list
+lead-engine sector-suggestion show --id 00000000-0000-0000-0000-000000000000
+lead-engine sector-suggestion review --id 00000000-0000-0000-0000-000000000000 --sector b2b-services --note "Clasificación revisada"
+lead-engine sector-suggestion accept --id 00000000-0000-0000-0000-000000000000 --note "Clasificación aceptada"
+lead-engine sector-suggestion reject --id 00000000-0000-0000-0000-000000000000 --note "No corresponde a una categoría diferenciada"
+```
+
+Only a human review action can move a suggestion out of `PROVISIONAL`. `NEEDS_REVIEW` remains
+pending until accepted or rejected. Acceptance requires a valid existing sector mapping; rejection
+requires a nonblank note. `ACCEPTED` and `REJECTED` are terminal. `reviewed_at` is populated only
+for those terminal decisions. Migration `0012` adds the independent `sector_suggestions` table.
 
 No scoring, research, shortlist, or `CampaignType` values or policy behavior are changed by this
 taxonomy. `CampaignType` remains a compatibility field that constrains existing policy resolution.

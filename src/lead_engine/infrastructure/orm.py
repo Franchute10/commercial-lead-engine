@@ -29,6 +29,7 @@ from lead_engine.domain.enums import (
     RoleCategory,
     SourceType,
 )
+from lead_engine.domain.sectors import SectorSuggestionStatus
 from lead_engine.infrastructure.types import UTCDateTime
 
 
@@ -169,6 +170,38 @@ class CampaignRow(EntityRow):
     active: Mapped[bool] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime())
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
+class SectorSuggestionRow(EntityRow):
+    __tablename__ = "sector_suggestions"
+    __table_args__ = (
+        CheckConstraint("length(trim(requested_name)) > 0", name="ck_sector_suggestion_name"),
+        CheckConstraint(
+            "status IN ('PROVISIONAL','NEEDS_REVIEW','ACCEPTED','REJECTED')",
+            name="ck_sector_suggestion_status",
+        ),
+        CheckConstraint(
+            "(status IN ('ACCEPTED','REJECTED') AND reviewed_at IS NOT NULL) OR "
+            "(status IN ('PROVISIONAL','NEEDS_REVIEW') AND reviewed_at IS NULL)",
+            name="ck_sector_suggestion_reviewed_at",
+        ),
+    )
+    requested_name: Mapped[str] = mapped_column(String(1000))
+    suggested_sector_id: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    suggested_subsector_id: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    suggested_profile_id: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    status: Mapped[SectorSuggestionStatus] = mapped_column(
+        Enum(
+            SectorSuggestionStatus,
+            native_enum=False,
+            create_constraint=False,
+            name="sector_suggestion_status",
+        )
+    )
+    review_note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    reviewed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
 
 class LeadRow(EntityRow):

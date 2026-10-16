@@ -355,6 +355,7 @@ def test_schema_tables_and_foreign_keys(engine: Engine) -> None:
         "evidence_dispositions",
         "contact_identities",
         "decision_maker_research_runs",
+        "sector_suggestions",
     }
     assert set(inspect(engine).get_table_names()) == expected
     with engine.connect() as connection:

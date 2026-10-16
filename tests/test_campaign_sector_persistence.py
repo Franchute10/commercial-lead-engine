@@ -179,7 +179,7 @@ def test_migration_adds_nullable_classification_and_downgrades_without_losing_le
     command.upgrade(config, "head")
     engine = build_engine(database_url)
     try:
-        assert database_revision(engine) == "0011"
+        assert database_revision(engine) == "0012"
         assert {"sector_id", "subsector_id"} <= {
             column["name"] for column in inspect(engine).get_columns("campaigns")
         }
@@ -217,7 +217,7 @@ def test_migration_adds_nullable_classification_and_downgrades_without_losing_le
         engine.dispose()
 
 
-def test_latest_migration_head_is_0011() -> None:
+def test_latest_migration_head_is_0012() -> None:
     from lead_engine.infrastructure.schema import latest_revision
 
-    assert latest_revision() == "0011"
+    assert latest_revision() == "0012"

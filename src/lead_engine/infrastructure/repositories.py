@@ -29,6 +29,7 @@ from lead_engine.domain.models import (
 from lead_engine.domain.outreach import OutreachDraft, OutreachEvent
 from lead_engine.domain.pilot import PilotEvaluation
 from lead_engine.domain.research import CommercialBrief
+from lead_engine.domain.sector_suggestions import SectorSuggestionRecord
 from lead_engine.domain.shortlist import DailyShortlistRun, ShortlistSuppression
 from lead_engine.infrastructure.orm import (
     CampaignRow,
@@ -51,6 +52,7 @@ from lead_engine.infrastructure.orm import (
     OutreachEventRow,
     PilotEvaluationRow,
     ScoreComponentRow,
+    SectorSuggestionRow,
     ShortlistSuppressionRow,
     SourceRow,
     WebsiteAuditRow,
@@ -58,6 +60,7 @@ from lead_engine.infrastructure.orm import (
 
 MAPPINGS: dict[type[Entity], type[EntityRow]] = {
     EvidenceDisposition: EvidenceDispositionRow,
+    SectorSuggestionRecord: SectorSuggestionRow,
     PilotEvaluation: PilotEvaluationRow,
     OutreachDraft: OutreachDraftRow,
     OutreachEvent: OutreachEventRow,
@@ -235,6 +238,16 @@ class SqlAlchemyRepository:
         data = run.model_dump()
         data["outcomes"] = run.model_dump(mode="json")["outcomes"]
         for field, value in data.items():
+            setattr(row, field, value)
+        self.session.flush()
+
+    def update_sector_suggestion(self, suggestion: SectorSuggestionRecord) -> None:
+        # Validate before mutating the session so rejected transitions leave no dirty row.
+        suggestion = SectorSuggestionRecord.model_validate(suggestion.model_dump())
+        row = self.session.get(SectorSuggestionRow, suggestion.id)
+        if row is None:
+            raise ValueError("Cannot update missing sector suggestion")
+        for field, value in suggestion.model_dump().items():
             setattr(row, field, value)
         self.session.flush()
 

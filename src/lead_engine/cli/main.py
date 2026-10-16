@@ -16,6 +16,7 @@ from lead_engine.cli.pilot import pilot_app
 from lead_engine.cli.research import research_app
 from lead_engine.cli.scoring import evidence_app, score_app
 from lead_engine.cli.scout import scout_app
+from lead_engine.cli.sector_suggestions import sector_suggestion_app
 from lead_engine.cli.shortlist import shortlist_app
 from lead_engine.domain.campaign_profiles import (
     DEFAULT_CAMPAIGN_PROFILES,
@@ -57,6 +58,7 @@ app.add_typer(scout_app, name="scout")
 app.add_typer(db_app, name="db")
 app.add_typer(company_app, name="company")
 app.add_typer(campaign_app, name="campaign")
+app.add_typer(sector_suggestion_app, name="sector-suggestion")
 
 
 @app.callback()

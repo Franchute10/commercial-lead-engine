@@ -91,7 +91,7 @@ class SectorSuggestion(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     requested_name: str
-    suggested_sector_id: str
+    suggested_sector_id: str | None = None
     suggested_subsector_id: str | None = None
     suggested_profile_id: str | None = None
     status: SectorSuggestionStatus = SectorSuggestionStatus.PROVISIONAL
@@ -105,11 +105,12 @@ class SectorSuggestion(BaseModel):
 
     @field_validator("suggested_sector_id")
     @classmethod
-    def existing_suggested_sector(cls, value: str) -> str:
-        try:
-            get_sector(value)
-        except LookupError as exc:
-            raise ValueError(str(exc)) from exc
+    def existing_suggested_sector(cls, value: str | None) -> str | None:
+        if value is not None:
+            try:
+                get_sector(value)
+            except LookupError as exc:
+                raise ValueError(str(exc)) from exc
         return value
 
     @field_validator("suggested_profile_id")
@@ -125,6 +126,8 @@ class SectorSuggestion(BaseModel):
     @model_validator(mode="after")
     def subsector_belongs_to_suggested_sector(self) -> "SectorSuggestion":
         if self.suggested_subsector_id is not None:
+            if self.suggested_sector_id is None:
+                raise ValueError("Suggested subsector requires a suggested sector")
             try:
                 subsector = get_subsector(self.suggested_subsector_id)
             except LookupError as exc:
@@ -336,7 +339,7 @@ def subsectors_for_sector(sector_id: str) -> tuple[EconomicSubsector, ...]:
 
 def create_sector_suggestion(
     requested_name: str,
-    suggested_sector_id: str,
+    suggested_sector_id: str | None = None,
     suggested_subsector_id: str | None = None,
     suggested_profile_id: str | None = None,
 ) -> SectorSuggestion:
