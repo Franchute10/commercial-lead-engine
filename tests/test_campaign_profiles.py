@@ -12,6 +12,7 @@ from lead_engine.domain.campaign_profiles import (
     build_campaign_profile_registry,
     get_campaign_profile,
     profile_for_campaign_type,
+    resolve_campaign_profile,
 )
 from lead_engine.domain.contact_research import DEFAULT_TARGET_ROLES
 from lead_engine.domain.enums import CampaignType, RoleCategory
@@ -53,6 +54,19 @@ def test_campaign_type_compatibility(kind: CampaignType, profile_id: str) -> Non
     campaign = Campaign(name="Existing", campaign_type=kind)
     assert campaign.campaign_type == kind
     assert campaign.profile_id == profile_id
+
+
+def test_campaign_profile_resolver_supports_legacy_and_explicit_profiles() -> None:
+    health = get_campaign_profile("health-v1")
+    assert resolve_campaign_profile(None, CampaignType.HEALTH) == health
+    assert resolve_campaign_profile("health-v1", None) == health
+    assert resolve_campaign_profile("health-v1", CampaignType.HEALTH) == health
+    with pytest.raises(ValueError, match="Provide --profile or --type"):
+        resolve_campaign_profile(None, None)
+    with pytest.raises(ValueError, match="Unknown campaign profile"):
+        resolve_campaign_profile("unknown-v1", None)
+    with pytest.raises(ValueError, match="must match"):
+        resolve_campaign_profile("health-v1", CampaignType.CONSTRUCTION)
 
 
 def test_campaign_profile_and_type_must_match() -> None:

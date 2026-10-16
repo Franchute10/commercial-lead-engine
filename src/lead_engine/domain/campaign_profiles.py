@@ -166,3 +166,23 @@ def profile_for_campaign_type(kind: CampaignType) -> CampaignProfile:
         CampaignType.HOSPITALITY: "hospitality-v1",
     }[kind]
     return get_campaign_profile(profile_id)
+
+
+def resolve_campaign_profile(
+    profile_id: str | None,
+    campaign_type: CampaignType | None,
+) -> CampaignProfile:
+    """Resolve an explicit profile or legacy campaign type without ambiguous fallbacks."""
+
+    if profile_id is None and campaign_type is None:
+        raise ValueError("Provide --profile or --type")
+    if profile_id is not None:
+        try:
+            profile = get_campaign_profile(profile_id)
+        except LookupError as exc:
+            raise ValueError(str(exc)) from exc
+        if campaign_type is not None and profile.campaign_type != campaign_type:
+            raise ValueError("--profile must match --type")
+        return profile
+    assert campaign_type is not None
+    return profile_for_campaign_type(campaign_type)

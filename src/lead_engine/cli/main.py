@@ -17,6 +17,10 @@ from lead_engine.cli.research import research_app
 from lead_engine.cli.scoring import evidence_app, score_app
 from lead_engine.cli.scout import scout_app
 from lead_engine.cli.shortlist import shortlist_app
+from lead_engine.domain.campaign_profiles import (
+    DEFAULT_CAMPAIGN_PROFILES,
+    resolve_campaign_profile,
+)
 from lead_engine.domain.enums import CampaignType
 from lead_engine.domain.models import Campaign, Company
 from lead_engine.infrastructure.database import (
@@ -144,20 +148,41 @@ def company_list(database_url: DatabaseOption = DEFAULT_DATABASE_URL) -> None:
 @campaign_app.command("add")
 def campaign_add(
     name: Annotated[str, typer.Option("--name")],
-    campaign_type: Annotated[CampaignType, typer.Option("--type")],
+    campaign_type: Annotated[CampaignType | None, typer.Option("--type")] = None,
     database_url: DatabaseOption = DEFAULT_DATABASE_URL,
     geography: str | None = None,
+    profile_id: Annotated[str | None, typer.Option("--profile")] = None,
+    country: Annotated[str | None, typer.Option("--country")] = None,
+    region: Annotated[str | None, typer.Option("--region")] = None,
+    city: Annotated[str | None, typer.Option("--city")] = None,
+    industry: Annotated[str | None, typer.Option("--industry")] = None,
+    subindustry: Annotated[str | None, typer.Option("--subindustry")] = None,
 ) -> None:
-    with transaction(database_url) as uow:
-        campaign = LeadService(uow).create_campaign(
-            Campaign(
-                name=name,
-                campaign_type=campaign_type,
-                geography=geography,
+    with admin_errors():
+        profile = resolve_campaign_profile(profile_id, campaign_type)
+        with transaction(database_url) as uow:
+            campaign = LeadService(uow).create_campaign(
+                Campaign(
+                    name=name,
+                    campaign_type=profile.campaign_type,
+                    profile_id=profile.profile_id,
+                    geography=geography,
+                    country=country,
+                    region=region,
+                    city=city,
+                    industry=industry,
+                    subindustry=subindustry,
+                )
             )
-        )
-        uow.commit()
-        typer.echo(campaign.model_dump_json())
+            uow.commit()
+            typer.echo(campaign.model_dump_json())
+
+
+@campaign_app.command("profiles")
+def campaign_profiles() -> None:
+    """List the built-in campaign profiles as one JSON object per line."""
+    for profile_id in ("health-v1", "construction-v1", "hospitality-v1"):
+        typer.echo(DEFAULT_CAMPAIGN_PROFILES[profile_id].model_dump_json())
 
 
 @campaign_app.command("list")

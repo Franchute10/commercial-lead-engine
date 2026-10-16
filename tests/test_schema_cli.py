@@ -8,7 +8,9 @@ from alembic.runtime.migration import MigrationContext
 from sqlalchemy import Engine, inspect
 from typer.testing import CliRunner
 
+from lead_engine.application.discovery import discovery_query_for_campaign
 from lead_engine.cli.main import app
+from lead_engine.domain.models import Campaign
 from lead_engine.infrastructure.database import build_engine
 from lead_engine.infrastructure.orm import Base
 from lead_engine.infrastructure.schema import (
@@ -64,6 +66,102 @@ def test_cli_database_init_status_and_manual_records(database_url: str) -> None:
     assert campaign.exit_code == 0, campaign.output
     assert json.loads(campaign.stdout)["profile_id"] == "health-v1"
     assert runner.invoke(app, ["campaign", "list", *options]).exit_code == 0
+
+
+def test_campaign_cli_profiles_structured_targeting_and_profile_resolution(
+    database_url: str,
+) -> None:
+    runner = CliRunner()
+    options = ["--database-url", database_url]
+    assert runner.invoke(app, ["db", "init", *options]).exit_code == 0
+
+    profiles = runner.invoke(app, ["campaign", "profiles"])
+    assert profiles.exit_code == 0, profiles.output
+    profile_values = [json.loads(line) for line in profiles.stdout.splitlines()]
+    assert [profile["profile_id"] for profile in profile_values] == [
+        "health-v1",
+        "construction-v1",
+        "hospitality-v1",
+    ]
+    assert all(
+        "scoring_profile" in profile and "target_roles" in profile for profile in profile_values
+    )
+
+    legacy = runner.invoke(
+        app,
+        ["campaign", "add", "--name", "Legacy", "--type", "HEALTH", *options],
+    )
+    assert legacy.exit_code == 0, legacy.output
+    assert json.loads(legacy.stdout)["profile_id"] == "health-v1"
+
+    explicit = runner.invoke(
+        app,
+        [
+            "campaign",
+            "add",
+            "--name",
+            "Chiclayo health",
+            "--profile",
+            "health-v1",
+            "--country",
+            "Peru",
+            "--region",
+            "Lambayeque",
+            "--city",
+            "Chiclayo",
+            "--industry",
+            "health",
+            "--subindustry",
+            "private clinics",
+            "--geography",
+            "Northern Peru",
+            *options,
+        ],
+    )
+    assert explicit.exit_code == 0, explicit.output
+    campaign_data = json.loads(explicit.stdout)
+    assert campaign_data["campaign_type"] == "HEALTH"
+    assert campaign_data["profile_id"] == "health-v1"
+    assert campaign_data["country"] == "Peru"
+    assert campaign_data["region"] == "Lambayeque"
+    assert campaign_data["city"] == "Chiclayo"
+    assert campaign_data["industry"] == "health"
+    assert campaign_data["subindustry"] == "private clinics"
+    assert campaign_data["geography"] == "Northern Peru"
+
+    matching = runner.invoke(
+        app,
+        [
+            "campaign",
+            "add",
+            "--name",
+            "Matching",
+            "--profile",
+            "construction-v1",
+            "--type",
+            "CONSTRUCTION",
+            *options,
+        ],
+    )
+    assert matching.exit_code == 0, matching.output
+
+    for invalid_args in (
+        ["--name", "Mismatch", "--profile", "health-v1", "--type", "CONSTRUCTION"],
+        ["--name", "Unknown", "--profile", "unknown-v1"],
+        ["--name", "Missing"],
+    ):
+        failed = runner.invoke(app, ["campaign", "add", *invalid_args, *options])
+        assert failed.exit_code != 0
+
+    listing = runner.invoke(app, ["campaign", "list", *options])
+    assert listing.exit_code == 0, listing.output
+    campaigns = [json.loads(line) for line in listing.stdout.splitlines()]
+    assert len(campaigns) == 3
+    persisted = next(item for item in campaigns if item["name"] == "Chiclayo health")
+    campaign = Campaign.model_validate(persisted)
+    query = discovery_query_for_campaign(campaign)
+    assert (query.country, query.region, query.city) == ("Peru", "Lambayeque", "Chiclayo")
+    assert query.industry == "health"
 
 
 def test_reset_confirmation_and_reinitialization(

@@ -12,6 +12,30 @@ field. The engine does not parse or infer structured values from `geography`. `i
 `subindustry` are targeting data and do not select a policy. Persisted structured fields can be
 passed into `discovery_query_for_campaign()` to create a provider-neutral discovery query.
 
-The existing `campaign add --name ... --type ...` CLI remains unchanged. CLI options for profile
-and structured targeting are deferred to a follow-up task; campaigns created through the existing
-command receive their canonical profile automatically.
+The campaign CLI accepts either the legacy vertical type, a versioned profile, or both when they
+match. `--profile` selects the vertical policy bundle; structured targeting narrows the campaign's
+intended companies and does not select or alter policies. The legacy `--geography` value remains
+free text and is not parsed into country, region, or city.
+
+```text
+# Existing type-only command remains supported.
+lead-engine campaign add --name "Clinics in Chiclayo" --type HEALTH --geography "Chiclayo, Lambayeque, Peru"
+
+# A profile supplies its campaign type. Structured targeting is stored separately.
+lead-engine campaign add --name "Clinics in Chiclayo" --profile health-v1 --country Peru --region Lambayeque --city Chiclayo --industry health --subindustry "private clinics"
+
+# Supplying both is valid only when the type matches the profile.
+lead-engine campaign add --name "Builders in Lima" --profile construction-v1 --type CONSTRUCTION --country Peru --city Lima
+
+lead-engine campaign profiles
+lead-engine campaign list
+```
+
+`campaign profiles` prints the three built-in profiles in stable order: `health-v1`,
+`construction-v1`, and `hospitality-v1`. Their policy references describe supported behavior; they
+do not imply support for every sector. For an unsupported sector, use the closest existing profile
+only when its policy is appropriate, and provide the narrower industry and subindustry as targeting
+data. Unknown profiles and mismatched profile/type pairs fail before database writes.
+
+Campaign targeting is passed to `discovery_query_for_campaign()` for provider-neutral query
+construction. This CLI does not perform discovery.
