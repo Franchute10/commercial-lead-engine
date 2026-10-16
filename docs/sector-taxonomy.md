@@ -47,11 +47,14 @@ Selected IDs must exist in the catalog, and the selected subsector must belong t
 Explicit sector classification is currently executable only for `health`,
 `construction-real-estate`, and `hospitality-tourism`, whose recommended profiles have been
 validated. The other six remain catalogued but Campaign creation rejects them until a profile is
-validated. The engine does not select a profile by proximity.
+validated. When one of the three supported sectors is supplied without `--profile` or `--type`, the
+CLI derives its recommended profile and corresponding legacy campaign type. Explicit profile or type
+values are accepted only when they agree with that sector. The engine does not select a profile by
+proximity.
 
 ```text
-lead-engine campaign add --name "Clínicas Chiclayo" --profile health-v1 --sector health --subsector private-clinics --country Peru --region Lambayeque --city Chiclayo
-lead-engine campaign add --name "Materiales Arequipa" --type CONSTRUCTION --sector construction-real-estate --subsector building-materials --country Peru --city Arequipa
+lead-engine campaign add --name "Clínicas Chiclayo" --sector health --subsector private-clinics --country Peru --region Lambayeque --city Chiclayo
+lead-engine campaign add --name "Materiales Arequipa" --sector construction-real-estate --subsector building-materials --country Peru --city Arequipa
 ```
 
 ## Other / Suggest sector

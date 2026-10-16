@@ -19,7 +19,7 @@ from lead_engine.cli.scout import scout_app
 from lead_engine.cli.shortlist import shortlist_app
 from lead_engine.domain.campaign_profiles import (
     DEFAULT_CAMPAIGN_PROFILES,
-    resolve_campaign_profile,
+    resolve_campaign_configuration,
 )
 from lead_engine.domain.enums import CampaignType
 from lead_engine.domain.models import Campaign, Company
@@ -166,23 +166,22 @@ def campaign_add(
     subsector_id: Annotated[str | None, typer.Option("--subsector")] = None,
 ) -> None:
     with admin_errors():
-        profile = resolve_campaign_profile(profile_id, campaign_type)
+        profile = resolve_campaign_configuration(sector_id, profile_id, campaign_type)
+        campaign = Campaign(
+            name=name,
+            campaign_type=profile.campaign_type,
+            profile_id=profile.profile_id,
+            sector_id=sector_id,
+            subsector_id=subsector_id,
+            geography=geography,
+            country=country,
+            region=region,
+            city=city,
+            industry=industry,
+            subindustry=subindustry,
+        )
         with transaction(database_url) as uow:
-            campaign = LeadService(uow).create_campaign(
-                Campaign(
-                    name=name,
-                    campaign_type=profile.campaign_type,
-                    profile_id=profile.profile_id,
-                    sector_id=sector_id,
-                    subsector_id=subsector_id,
-                    geography=geography,
-                    country=country,
-                    region=region,
-                    city=city,
-                    industry=industry,
-                    subindustry=subindustry,
-                )
-            )
+            campaign = LeadService(uow).create_campaign(campaign)
             uow.commit()
             typer.echo(campaign.model_dump_json())
 

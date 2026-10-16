@@ -186,3 +186,33 @@ def resolve_campaign_profile(
         return profile
     assert campaign_type is not None
     return profile_for_campaign_type(campaign_type)
+
+
+def resolve_campaign_configuration(
+    sector_id: str | None,
+    profile_id: str | None,
+    campaign_type: CampaignType | None,
+) -> CampaignProfile:
+    """Resolve a campaign profile from explicit sector, profile, or legacy type inputs."""
+
+    if sector_id is None:
+        return resolve_campaign_profile(profile_id, campaign_type)
+
+    from lead_engine.domain.sectors import get_sector
+
+    try:
+        sector = get_sector(sector_id)
+    except LookupError as exc:
+        raise ValueError(str(exc)) from exc
+    if sector.recommended_profile_id is None:
+        raise ValueError("Sector has no validated campaign profile yet.")
+    if profile_id is not None and profile_id != sector.recommended_profile_id:
+        raise ValueError("--profile must match the sector's recommended profile")
+
+    resolved_profile = resolve_campaign_profile(
+        sector.recommended_profile_id if profile_id is None else profile_id,
+        campaign_type,
+    )
+    if resolved_profile.profile_id != sector.recommended_profile_id:
+        raise ValueError("--profile must match the sector's recommended profile")
+    return resolved_profile

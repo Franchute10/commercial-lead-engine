@@ -46,11 +46,12 @@ At present, a selected sector must recommend the same validated profile as the c
 `health`, `construction-real-estate`, and `hospitality-tourism` can be used for executable campaigns;
 the other six catalog sectors have no validated profile and are rejected for campaign creation. Do
 not substitute a different sector's profile; see [the sector taxonomy](sector-taxonomy.md) for the
-classification and profile relationship.
+classification and profile relationship. With a supported `--sector`, `--profile` and `--type` may
+both be omitted; the sector resolves the recommended profile and its corresponding campaign type.
 
 ```text
-lead-engine campaign add --name "Clínicas Chiclayo" --profile health-v1 --sector health --subsector private-clinics --country Peru --region Lambayeque --city Chiclayo --industry healthcare --subindustry "outpatient clinics"
-lead-engine campaign add --name "Materiales Arequipa" --type CONSTRUCTION --sector construction-real-estate --subsector building-materials --country Peru --city Arequipa
+lead-engine campaign add --name "Clínicas Chiclayo" --sector health --subsector private-clinics --country Peru --region Lambayeque --city Chiclayo --industry healthcare --subindustry "outpatient clinics"
+lead-engine campaign add --name "Materiales Arequipa" --sector construction-real-estate --subsector building-materials --country Peru --city Arequipa
 ```
 
 `campaign_type` remains the compatibility input for current policy resolution. A future policy
