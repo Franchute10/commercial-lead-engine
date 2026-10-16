@@ -77,12 +77,12 @@ ROLE_ANGLES: dict[RoleCategory, tuple[str, str]] = {
 }
 
 CAMPAIGN_ANGLES: dict[str, tuple[str, str]] = {
-    "HEALTH": ("facilitar evaluaciones y citas", "make evaluations and appointments easier"),
-    "CONSTRUCTION": (
+    "health-v1": ("facilitar evaluaciones y citas", "make evaluations and appointments easier"),
+    "construction-v1": (
         "facilitar consultas de productos y cotizaciones",
         "make product enquiries and quotations easier",
     ),
-    "HOSPITALITY": (
+    "hospitality-v1": (
         "facilitar reservas y consultas de eventos",
         "make reservations and event enquiries easier",
     ),
@@ -139,9 +139,22 @@ class V1OutreachPolicy:
         referral: str,
         authority: bool,
     ) -> tuple[str | None, str]:
+        from lead_engine.domain.campaign_profiles import (
+            get_campaign_profile,
+            profile_for_campaign_type,
+        )
+        from lead_engine.domain.enums import CampaignType
+
+        try:
+            profile_id = get_campaign_profile(campaign).profile_id
+        except LookupError:
+            try:
+                profile_id = profile_for_campaign_type(CampaignType(campaign)).profile_id
+            except ValueError as exc:
+                raise ValueError(f"Unknown outreach profile: {campaign}") from exc
         en = language == OutreachLanguage.EN
         index = int(en)
-        angle = OPPORTUNITY_ANGLES.get(opportunity, CAMPAIGN_ANGLES[campaign])[index]
+        angle = OPPORTUNITY_ANGLES.get(opportunity, CAMPAIGN_ANGLES[profile_id])[index]
         role_angle = ROLE_ANGLES[role][index]
         greeting = f"Hello {name}." if en else f"Hola {name}."
         if channel == OutreachChannel.WEBSITE_CONTACT_FORM:
@@ -217,13 +230,13 @@ class V1OutreachPolicy:
         subject = (
             (
                 {
-                    "HEALTH": ("Evaluaciones y citas", "Evaluations and appointments"),
-                    "CONSTRUCTION": ("Consultas y cotizaciones", "Enquiries and quotations"),
-                    "HOSPITALITY": (
+                    "health-v1": ("Evaluaciones y citas", "Evaluations and appointments"),
+                    "construction-v1": ("Consultas y cotizaciones", "Enquiries and quotations"),
+                    "hospitality-v1": (
                         "Reservas y experiencia de marca",
                         "Reservations and brand experience",
                     ),
-                }[campaign][index]
+                }[profile_id][index]
             )
             if channel == OutreachChannel.EMAIL
             else None

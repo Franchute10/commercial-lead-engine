@@ -10,6 +10,7 @@ from lead_engine.application.discovery import UnitOfWorkFactory
 from lead_engine.application.evidence_lifecycle import current_evidence
 from lead_engine.application.ports import Repository
 from lead_engine.application.shortlist import DailyShortlistService
+from lead_engine.domain.commercial_policies import resolve_commercial_policy_bundle
 from lead_engine.domain.contact_research import ContactRecommendation
 from lead_engine.domain.enums import InteractionType, SourceType
 from lead_engine.domain.errors import DuplicateError, NotFoundError
@@ -63,6 +64,7 @@ class OutreachDraftService:
         self.settings = settings or OutreachSettings()
         self.shortlist_settings = shortlist_settings or ShortlistSettings()
         self.policy = policy or V1OutreachPolicy()
+        self._policy_override = policy
         self.clock = clock
 
     def _now(self) -> datetime:
@@ -298,8 +300,10 @@ class OutreachDraftService:
                 )
                 and contact.fit_score >= 70
             )
-            subject, body = self.policy.render(
-                campaign=context.campaign.campaign_type.value,
+            bundle = resolve_commercial_policy_bundle(context.campaign)
+            outreach_policy = self._policy_override or bundle.outreach
+            subject, body = outreach_policy.render(
+                campaign=bundle.profile.profile_id,
                 opportunity=brief.opportunity_type.value,
                 role=contact.role_category,
                 language=language,
@@ -314,7 +318,7 @@ class OutreachDraftService:
             )
             # A custom policy cannot introduce arbitrary prose; compare with the closed V1 renderer.
             expected = V1OutreachPolicy().render(
-                campaign=context.campaign.campaign_type.value,
+                campaign=bundle.profile.profile_id,
                 opportunity=brief.opportunity_type.value,
                 role=contact.role_category,
                 language=language,
@@ -327,7 +331,7 @@ class OutreachDraftService:
                 referral=referral_text,
                 authority=authority,
             )
-            if self.policy.version != "outreach-v1" or (subject, body) != expected:
+            if outreach_policy.version != "outreach-v1" or (subject, body) != expected:
                 raise ValueError("Unsupported claim or unrecognized outreach policy")
             warnings = [
                 "Human approval required. Approval never sends; use is a human attestation."
@@ -347,7 +351,7 @@ class OutreachDraftService:
                 contact_role=contact.current_role,
                 role_category=contact.role_category,
                 created_at=now,
-                outreach_version=self.policy.version,
+                outreach_version=outreach_policy.version,
                 channel=actual_channel,
                 channel_value=item.recommended_channel_value,
                 purpose=purpose,

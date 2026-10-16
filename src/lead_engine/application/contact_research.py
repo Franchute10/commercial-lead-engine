@@ -5,8 +5,8 @@ from uuid import UUID
 
 from lead_engine.application.discovery import UnitOfWorkFactory
 from lead_engine.application.evidence_lifecycle import current_evidence
+from lead_engine.domain.commercial_policies import resolve_commercial_policy_bundle
 from lead_engine.domain.contact_research import (
-    DEFAULT_TARGET_ROLES,
     ContactCandidate,
     ContactDiscoveryProvider,
     ContactIdentity,
@@ -17,7 +17,6 @@ from lead_engine.domain.contact_research import (
     VerificationState,
     identity_keys,
     is_supported,
-    role_points,
     source_reliability,
 )
 from lead_engine.domain.errors import IdentityConflictError, NotFoundError
@@ -239,6 +238,7 @@ class DecisionMakerResearchService:
             campaign = repo.get(Campaign, lead.campaign_id)
             if company is None or campaign is None:
                 raise NotFoundError("Lead relationships missing")
+            bundle = resolve_commercial_policy_bundle(campaign)
             results = []
             evidence = current_evidence(repo, company.id, now)
             for contact in repo.list(Contact, company_id=company.id):
@@ -270,11 +270,8 @@ class DecisionMakerResearchService:
                     if e.observed_at == current.observed_at
                 ]
                 conflicted = len(set(tied)) > 1
-                role = role_points(
-                    candidate.role_category,
-                    campaign.campaign_type,
-                    candidate.context,
-                    candidate.role_title or "",
+                role = bundle.contact_role_fit(
+                    candidate.role_category, candidate.context, candidate.role_title or ""
                 )
                 channels = []
                 refs = []
@@ -355,7 +352,7 @@ class DecisionMakerResearchService:
             return RecommendationResult(
                 lead_id=lead_id,
                 contacts=results[:limit],
-                target_roles=[] if results else list(DEFAULT_TARGET_ROLES),
+                target_roles=[] if results else list(bundle.profile.target_roles),
                 message="Supported contacts; human review required"
                 if results
                 else "No supported individual contact found",

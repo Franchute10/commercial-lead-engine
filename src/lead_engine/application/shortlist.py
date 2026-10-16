@@ -9,6 +9,7 @@ from lead_engine.application.discovery import UnitOfWorkFactory
 from lead_engine.application.evidence_lifecycle import current_evidence
 from lead_engine.application.ports import Repository
 from lead_engine.domain.audit import WebsiteAudit
+from lead_engine.domain.commercial_policies import resolve_commercial_policy_bundle
 from lead_engine.domain.errors import NotFoundError
 from lead_engine.domain.evidence_lifecycle import EvidenceDisposition
 from lead_engine.domain.identity import normalize_name
@@ -47,6 +48,7 @@ class DailyShortlistService:
         self.factory = factory
         self.settings = settings or ShortlistSettings()
         self.policy = policy or V1ShortlistPolicy()
+        self._policy_override = policy
         self.clock = clock
 
     def _now(self) -> datetime:
@@ -130,7 +132,8 @@ class DailyShortlistService:
                 ):
                     continue
                 context = self.build_context(repo, lead, as_of)
-                decision = self.policy.evaluate(context, filters, self.settings)
+                shortlist_policy = self._policy_for(campaign)
+                decision = shortlist_policy.evaluate(context, filters, self.settings)
                 if decision.item.lead_id != lead.id:
                     raise ValueError("Policy returned another lead")
                 decisions.append(decision)
@@ -196,13 +199,23 @@ class DailyShortlistService:
             uow.commit()
             return run
 
+    def _policy_for(self, campaign: Campaign) -> ShortlistPolicy:
+        return (
+            self._policy_override
+            if self._policy_override is not None
+            else resolve_commercial_policy_bundle(campaign).shortlist
+        )
+
     def explain(self, lead_id: UUID) -> ShortlistDecision:
         as_of = self._now()
         with self.factory() as uow:
             lead = uow.repository.get(Lead, lead_id)
             if lead is None:
                 raise NotFoundError("Lead not found")
-            return self.policy.evaluate(
+            campaign = uow.repository.get(Campaign, lead.campaign_id)
+            if campaign is None:
+                raise NotFoundError("Campaign not found")
+            return self._policy_for(campaign).evaluate(
                 self.build_context(uow.repository, lead, as_of), ShortlistFilters(), self.settings
             )
 

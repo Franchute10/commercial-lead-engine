@@ -204,8 +204,20 @@ def is_supported(
 def role_points(
     category: RoleCategory, campaign: CampaignType, context: str | None, title: str
 ) -> int:
+    from lead_engine.domain.campaign_profiles import profile_for_campaign_type
+
+    return role_points_for_profile(
+        category, profile_for_campaign_type(campaign).profile_id, context, title
+    )
+
+
+def role_points_for_profile(
+    category: RoleCategory, profile_id: str, context: str | None, title: str
+) -> int:
+    """Resolve role fit from a validated profile identifier."""
+
     weights = {
-        CampaignType.HEALTH: {
+        "health-v1": {
             "OWNER": 50,
             "FOUNDER": 50,
             "GENERAL_MANAGEMENT": 46,
@@ -215,7 +227,7 @@ def role_points(
             "COMMERCIAL": 36,
             "ADMINISTRATION": 25,
         },
-        CampaignType.CONSTRUCTION: {
+        "construction-v1": {
             "OWNER": 50,
             "FOUNDER": 50,
             "GENERAL_MANAGEMENT": 46,
@@ -224,7 +236,7 @@ def role_points(
             "DIGITAL": 38,
             "ADMINISTRATION": 25,
         },
-        CampaignType.HOSPITALITY: {
+        "hospitality-v1": {
             "OWNER": 45,
             "FOUNDER": 45,
             "MARKETING": 46,
@@ -235,8 +247,12 @@ def role_points(
             "ADMINISTRATION": 25,
         },
     }
-    points = weights[campaign].get(category.value, 10)
-    if campaign == CampaignType.HOSPITALITY:
+    try:
+        profile_weights = weights[profile_id]
+    except KeyError as exc:
+        raise ValueError(f"Unknown contact-fit profile: {profile_id}") from exc
+    points = profile_weights.get(category.value, 10)
+    if profile_id == "hospitality-v1":
         if context == "independent" and category in {RoleCategory.OWNER, RoleCategory.FOUNDER}:
             points = 50
         if context == "group":
@@ -245,7 +261,7 @@ def role_points(
             if "restaurant" in normalize_name(title) or "restaurante" in normalize_name(title):
                 points = min(points, 25)
     if (
-        campaign == CampaignType.HEALTH
+        profile_id == "health-v1"
         and context == "small_clinic"
         and category == RoleCategory.MEDICAL_DIRECTOR
     ):

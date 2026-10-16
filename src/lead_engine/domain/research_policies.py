@@ -6,6 +6,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from lead_engine.domain.audit import AuditStatus
+from lead_engine.domain.campaign_profiles import profile_for_campaign_type
 from lead_engine.domain.commercial import BusinessSignal
 from lead_engine.domain.contact_research import VerificationState
 from lead_engine.domain.enums import CampaignType
@@ -58,8 +59,8 @@ LABELS: dict[str, str] = {
     "ECOMMERCE_PRESENT": "No ecommerce path was observed in the inspected scope",
 }
 
-RULES: dict[CampaignType, tuple[ResearchRule, ...]] = {
-    CampaignType.HEALTH: (
+RULES: dict[str, tuple[ResearchRule, ...]] = {
+    "health-v1": (
         ResearchRule(
             OpportunityType.APPOINTMENT_CONVERSION,
             "Appointment conversion",
@@ -80,7 +81,7 @@ RULES: dict[CampaignType, tuple[ResearchRule, ...]] = {
             ("HAS_DIRECT_CONTACT_PATH",),
         ),
     ),
-    CampaignType.CONSTRUCTION: (
+    "construction-v1": (
         ResearchRule(
             OpportunityType.QUOTE_CONVERSION,
             "Quotation conversion",
@@ -107,7 +108,7 @@ RULES: dict[CampaignType, tuple[ResearchRule, ...]] = {
             ("HAS_DIRECT_CONTACT_PATH", "CONTACT_FORM_PRESENT"),
         ),
     ),
-    CampaignType.HOSPITALITY: (
+    "hospitality-v1": (
         ResearchRule(
             OpportunityType.RESERVATION_CONVERSION,
             "Reservation conversion",
@@ -197,6 +198,11 @@ class V1ResearchPolicy:
     campaign_type: CampaignType
 
     @property
+    def profile_id(self) -> str:
+        """Resolve the legacy policy identity to its canonical campaign profile."""
+        return profile_for_campaign_type(self.campaign_type).profile_id
+
+    @property
     def version(self) -> str:
         return f"{self.campaign_type.value.lower()}-research-v1"
 
@@ -254,7 +260,7 @@ class V1ResearchPolicy:
                 )
             )
 
-        for rule in RULES[self.campaign_type]:
+        for rule in RULES[self.profile_id]:
             add_rule(rule)
         # Reputation is an alternative commercial anchor, never a stand-alone opportunity.
         count = fact("GOOGLE_REVIEW_COUNT")
@@ -269,14 +275,12 @@ class V1ResearchPolicy:
         )
         if strong_reputation:
             kind = {
-                CampaignType.HEALTH: OpportunityType.APPOINTMENT_CONVERSION,
-                CampaignType.CONSTRUCTION: OpportunityType.QUOTE_CONVERSION,
-                CampaignType.HOSPITALITY: OpportunityType.RESERVATION_CONVERSION,
-            }[self.campaign_type]
+                "health-v1": OpportunityType.APPOINTMENT_CONVERSION,
+                "construction-v1": OpportunityType.QUOTE_CONVERSION,
+                "hospitality-v1": OpportunityType.RESERVATION_CONVERSION,
+            }[self.profile_id]
             gap_signal = (
-                "HAS_QUOTE_PATH"
-                if self.campaign_type == CampaignType.CONSTRUCTION
-                else "HAS_RESERVATION_PATH"
+                "HAS_QUOTE_PATH" if self.profile_id == "construction-v1" else "HAS_RESERVATION_PATH"
             )
             gap = fact(gap_signal)
             existing = next(
@@ -322,7 +326,7 @@ class V1ResearchPolicy:
                     ),
                 )
         campaign_anchors = tuple(
-            dict.fromkeys(signal for rule in RULES[self.campaign_type] for signal in rule.anchors)
+            dict.fromkeys(signal for rule in RULES[self.profile_id] for signal in rule.anchors)
         )
         for rule in (
             ResearchRule(
@@ -669,7 +673,7 @@ class V2ResearchPolicy(V1ResearchPolicy):
         return f"{self.campaign_type.value.lower()}-research-v2"
 
     def allow_rule(self, rule: ResearchRule, fact: "Callable[[str], Fact]") -> bool:
-        if self.campaign_type == CampaignType.HEALTH and rule.kind in {
+        if self.profile_id == "health-v1" and rule.kind in {
             OpportunityType.CUSTOMER_JOURNEY,
             OpportunityType.CONTACTABILITY,
             OpportunityType.MULTI_LOCATION_EXPERIENCE,
@@ -726,7 +730,7 @@ class V3ResearchPolicy(V2ResearchPolicy):
         return f"{self.campaign_type.value.lower()}-research-v3"
 
     def allow_rule(self, rule: ResearchRule, fact: "Callable[[str], Fact]") -> bool:
-        if self.campaign_type == CampaignType.HEALTH:
+        if self.profile_id == "health-v1":
             direct_contact_absent = fact("HAS_DIRECT_CONTACT_PATH").state == SignalState.ABSENT
             if rule.kind == OpportunityType.CUSTOMER_JOURNEY and direct_contact_absent:
                 # The explicit direct-contact gap is independent of booking availability.

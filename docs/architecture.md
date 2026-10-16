@@ -46,6 +46,33 @@ Revision `0002` adds `discovery_runs`; `0003` adds `website_audits` and optional
 Alembic manages `alembic_version`. All entity IDs are UUIDs.
 No separate pipeline table exists: `PipelineStage` aliases `LeadStatus` to avoid conflicting states.
 
+## Campaign policy resolution
+
+Commercial services resolve policies through one immutable registry keyed by validated
+`CampaignProfile.profile_id`. The registry binds the existing policy versions for scoring,
+research, contact-role fit, shortlist evaluation, and outreach rendering. The outreach renderer is
+shared; the selected bundle supplies its established vertical template variant. Discovery already
+uses profile defaults when building provider-neutral queries.
+
+```mermaid
+flowchart LR
+    C[Campaign profile_id] --> R[Validated profile resolver]
+    R --> B[Commercial policy bundle registry]
+    B --> S[Scoring policy]
+    B --> RE[Research policy]
+    B --> CF[Contact role-fit policy]
+    B --> SH[Shortlist policy]
+    B --> O[Outreach renderer and profile variant]
+    T[Legacy CampaignType] -. fixed compatibility mapping .-> R
+    G[Sector / subsector / sector suggestion] -. no policy selection .-> C
+```
+
+The registry reuses the current policy objects and profile references. Type-only legacy campaigns
+resolve through the existing fixed compatibility map without persisting a derived profile. Explicit
+profile/type mismatches and unknown profiles fail. `CampaignType` remains stored and visible for
+compatibility, output, and filtering; it is not the future extension mechanism. Sector
+classification and sector suggestions do not select policies.
+
 ## Evidence and qualification
 
 Each evidence record requires a company, source, statement, category, confidence and observation time.

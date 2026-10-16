@@ -8,6 +8,7 @@ from lead_engine.application.contact_research import DecisionMakerResearchServic
 from lead_engine.application.discovery import UnitOfWorkFactory
 from lead_engine.application.evidence_lifecycle import current_evidence
 from lead_engine.domain.audit import WebsiteAudit
+from lead_engine.domain.commercial_policies import resolve_commercial_policy_bundle
 from lead_engine.domain.contact_research import RecommendationResult
 from lead_engine.domain.enums import CampaignType
 from lead_engine.domain.errors import NotFoundError
@@ -40,6 +41,9 @@ class CommercialResearchService:
         self.factory = uow_factory
         self.recommendations = recommendations or DecisionMakerResearchService(uow_factory)
         self.policies = dict(policies or DEFAULT_RESEARCH_POLICIES)
+        self._custom_policies: Mapping[CampaignType, ResearchPolicy] | None = (
+            dict(policies) if policies else None
+        )
 
     def research_lead(self, lead_id: UUID) -> CommercialBrief:
         contacts = self.recommendations.recommend_contacts(lead_id, limit=3)
@@ -52,7 +56,12 @@ class CommercialResearchService:
             campaign = repo.get(Campaign, lead.campaign_id)
             if company is None or campaign is None:
                 raise NotFoundError("Lead relationships missing")
-            policy = self.policies.get(campaign.campaign_type)
+            bundle = resolve_commercial_policy_bundle(campaign)
+            policy = (
+                self._custom_policies.get(bundle.profile.campaign_type)
+                if self._custom_policies
+                else bundle.research
+            )
             if policy is None:
                 raise ValueError("No research policy registered for campaign")
             cutoff = utc_now()

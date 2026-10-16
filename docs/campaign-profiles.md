@@ -2,7 +2,10 @@
 
 Campaigns persist a stable `profile_id` alongside the legacy `campaign_type`. The profile ID is
 derived from the campaign type when omitted and must resolve to the same vertical when supplied.
-Scoring, research, and shortlist policies continue to resolve from `campaign_type`.
+Commercial policy resolution follows `Campaign → Profile → Commercial Policies`: the central
+registry binds each profile's policy references to the existing scoring, research, contact-fit,
+shortlist, and outreach policy implementations. Discovery already derives its query from the
+profile's defaults and structured campaign targeting.
 Migration `0010` backfills existing campaigns using a fixed mapping and preserves their IDs,
 leads, and legacy geography. The SQLite column remains nullable to avoid rebuilding the referenced
 campaign table; application-created domain campaigns always resolve and require a profile ID.
@@ -54,6 +57,11 @@ lead-engine campaign add --name "Clínicas Chiclayo" --sector health --subsector
 lead-engine campaign add --name "Materiales Arequipa" --sector construction-real-estate --subsector building-materials --country Peru --city Arequipa
 ```
 
-`campaign_type` remains the compatibility input for current policy resolution. A future policy
-resolution change may depend on `profile_id` alone, allowing that operational dependency to be
-retired without inferring sector classifications for old campaigns.
+`campaign_type` remains a historical compatibility attribute and input for creating legacy
+campaigns. Type-only construction uses the established fixed mapping to derive the effective
+profile; resolving an existing campaign does not write that value back to persistence. When an
+explicit profile is present, it is validated and never replaced by a type-derived profile. Unknown
+profiles and inconsistent profile/type pairs fail instead of falling back. `campaign_type` is not
+the extension mechanism for future sectors: a future commercial vertical needs an explicitly
+validated profile and policy references. Sector and subsector classification, including pending
+`SectorSuggestion` records, never selects or changes a policy.

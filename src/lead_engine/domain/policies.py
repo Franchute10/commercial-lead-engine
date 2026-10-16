@@ -190,6 +190,12 @@ class Observations:
         return samples
 
     def _decision_maker(self) -> Fact:
+        from lead_engine.domain.campaign_profiles import resolve_campaign_profile
+
+        campaign_profile = resolve_campaign_profile(
+            self.context.campaign.profile_id or None,
+            self.context.campaign.campaign_type,
+        )
         contacts = {
             item.id: item
             for item in self.context.contacts
@@ -223,7 +229,7 @@ class Observations:
                     points = 8
                 elif (
                     contact.role_category == RoleCategory.MEDICAL_DIRECTOR
-                    and self.context.campaign.campaign_type == CampaignType.HEALTH
+                    and campaign_profile.profile_id == "health-v1"
                 ):
                     points = 8
                 elif contact.role_category == RoleCategory.ADMINISTRATION:

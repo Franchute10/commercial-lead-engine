@@ -7,10 +7,10 @@ from lead_engine.application.discovery import UnitOfWorkFactory
 from lead_engine.application.evidence_lifecycle import current_evidence
 from lead_engine.application.services import LeadService
 from lead_engine.domain.audit import WebsiteAudit
+from lead_engine.domain.commercial_policies import resolve_commercial_policy_bundle
 from lead_engine.domain.enums import CampaignType
 from lead_engine.domain.errors import NotFoundError
 from lead_engine.domain.models import Campaign, Company, Contact, Lead, LeadScore, utc_now
-from lead_engine.domain.policies import DEFAULT_POLICIES
 from lead_engine.domain.scoring import (
     CampaignScoringPolicy,
     ScoreSummary,
@@ -27,8 +27,8 @@ class CommercialScoringService:
         policies: Mapping[CampaignType, CampaignScoringPolicy] | None = None,
     ) -> None:
         self._uow_factory = uow_factory
-        self._policies: Mapping[CampaignType, CampaignScoringPolicy] = dict(
-            policies or DEFAULT_POLICIES
+        self._custom_policies: Mapping[CampaignType, CampaignScoringPolicy] | None = (
+            dict(policies) if policies else None
         )
 
     def score_lead(self, lead_id: UUID) -> ScoringResult:
@@ -41,7 +41,12 @@ class CommercialScoringService:
             campaign = repository.get(Campaign, lead.campaign_id)
             if company is None or campaign is None:
                 raise NotFoundError("Lead company/campaign does not exist")
-            policy = self._policies.get(campaign.campaign_type)
+            bundle = resolve_commercial_policy_bundle(campaign)
+            policy = (
+                self._custom_policies.get(bundle.profile.campaign_type)
+                if self._custom_policies
+                else bundle.scoring
+            )
             if policy is None:
                 raise ValueError("No scoring policy registered for this campaign")
             cutoff = utc_now()
