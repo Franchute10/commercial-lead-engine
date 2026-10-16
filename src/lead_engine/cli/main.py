@@ -23,6 +23,11 @@ from lead_engine.domain.campaign_profiles import (
 )
 from lead_engine.domain.enums import CampaignType
 from lead_engine.domain.models import Campaign, Company
+from lead_engine.domain.sectors import (
+    DEFAULT_SECTORS,
+    get_sector,
+    subsectors_for_sector,
+)
 from lead_engine.infrastructure.database import (
     DEFAULT_DATABASE_URL,
     SqlAlchemyDatabaseProbe,
@@ -183,6 +188,27 @@ def campaign_profiles() -> None:
     """List the built-in campaign profiles as one JSON object per line."""
     for profile_id in ("health-v1", "construction-v1", "hospitality-v1"):
         typer.echo(DEFAULT_CAMPAIGN_PROFILES[profile_id].model_dump_json())
+
+
+@campaign_app.command("sectors")
+def campaign_sectors() -> None:
+    """List official economic sectors as one JSON object per line."""
+    for sector in DEFAULT_SECTORS.values():
+        typer.echo(sector.model_dump_json())
+
+
+@campaign_app.command("subsectors")
+def campaign_subsectors(
+    sector_id: Annotated[str, typer.Option("--sector")],
+) -> None:
+    """List the subsectors for one official economic sector."""
+    with admin_errors():
+        try:
+            get_sector(sector_id)
+        except LookupError as exc:
+            raise ValueError(str(exc)) from exc
+        for subsector in subsectors_for_sector(sector_id):
+            typer.echo(subsector.model_dump_json())
 
 
 @campaign_app.command("list")
