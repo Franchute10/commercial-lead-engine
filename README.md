@@ -6,7 +6,7 @@ opportunity with absence of a website. Important conclusions are stored as attri
 
 The current version provides a typed domain, SQLite persistence, Alembic migrations, application
 services, Scout CSV/demo discovery, bounded website auditing, commercial scoring and a manual admin CLI.
-It performs no deep crawling, AI inference, LinkedIn automation or automatic outreach. Public intent discovery is an optional, bounded Brave Search API integration; it searches indexed pages and discussions, not private or login-only content.
+It performs no deep crawling, AI inference, LinkedIn automation or automatic outreach. Public intent discovery is an optional, bounded Tavily Search API integration; it searches indexed pages and discussions, not private or login-only content.
 Human approval remains required before outreach; interaction records only track human actions.
 
 ## Setup
@@ -473,7 +473,7 @@ offline; this task does not claim results from a real-company campaign.
 
 ## Public intent capture (V1)
 
-V1 records and ranks explicit service requests that an operator finds on public pages. It queries Brave Search's public index for recent pages and discussions. Results from Facebook groups appear only when they are publicly indexed and accessible; the retired Groups API is not used. It does not enter accounts, fetch closed-group content, or send outreach. Capture only posts you are allowed to access and retain; keep the source URL and a short, relevant excerpt so each signal can be reviewed.
+V1 records and ranks explicit service requests that an operator finds on public pages. It queries Tavily's public web index for recent pages and discussions. Results from Facebook groups appear only when they are publicly indexed and accessible; the retired Groups API is not used. It does not enter accounts, fetch closed-group content, or send outreach. Capture only posts you are allowed to access and retain; keep the source URL and a short, relevant excerpt so each signal can be reviewed.
 
 Use lead-engine intent capture --help for the exact options, then provide the campaign, platform, request type, source URL, requested service, and short evidence excerpt. Optional location and timezone-aware post timestamp improve qualification. Duplicate source URLs are rejected.
 
@@ -484,18 +484,18 @@ This increment establishes the capture, qualification, and persistence path. Aut
 
 ### Run public intent discovery
 
-Create a campaign with a city or region, then set a Brave Search API key in the environment. The API is optional; check the provider's current commercial terms and pricing before enabling it.
+Create a campaign with a city or region, then set a Tavily API key in the environment. The API is optional; check the provider's current commercial terms and pricing before enabling it.
 
     # Windows PowerShell
-    $env:BRAVE_SEARCH_API_KEY = "your-key"
+    $env:TAVILY_API_KEY = "your-key"
     # Windows CMD
-    set BRAVE_SEARCH_API_KEY=your-key
+    set TAVILY_API_KEY=your-key
     # macOS/Linux
-    export BRAVE_SEARCH_API_KEY=your-key
+    export TAVILY_API_KEY=your-key
     lead-engine db init
     lead-engine intent discover --campaign "Sarasota Cleaning" --service "house cleaning" --country US --language en --freshness pw --per-query 10
     lead-engine intent list --campaign "Sarasota Cleaning"
 
 For Spanish-language searches use --language es and the appropriate two-letter country code, such as PE. Each run issues at most three searches (general web, indexed Facebook group pages, indexed Reddit pages), with up to 20 results each. It stores results whose title or excerpt contains a request signal, along with the source URL and excerpt. Missing date or location evidence leaves a candidate unqualified for human review. Search results do not prove that the author is reachable or still needs the service.
 
-The Brave Search API requires its own key and may incur usage charges. See the [current API pricing](https://api-dashboard.search.brave.com/documentation/pricing) and [Web Search documentation](https://api-dashboard.search.brave.com/app/documentation/web-search). Coverage depends on the provider's index; Facebook group coverage is not guaranteed.
+Tavily's free Researcher plan currently includes 1,000 credits per month and does not require a credit card. Paid usage is optional; check current limits and pricing before enabling it. See [Tavily pricing](https://www.tavily.com/pricing) and the [Search API documentation](https://docs.tavily.com/documentation/api-reference/endpoint/search). Coverage depends on Tavily's index; Facebook group coverage is not guaranteed.
