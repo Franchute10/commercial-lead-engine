@@ -11,7 +11,7 @@ from lead_engine.application.intent_signals import IntentSignalService
 from lead_engine.application.ports import UnitOfWork
 from lead_engine.domain.errors import DuplicateError
 from lead_engine.domain.identity import normalize_name
-from lead_engine.domain.intent_signal import RequestType, SignalPlatform
+from lead_engine.domain.intent_signal import IntentSignal, RequestType, SignalPlatform
 from lead_engine.domain.models import Campaign
 from lead_engine.infrastructure.public_search import BraveSearchProvider, SearchHit
 
@@ -54,7 +54,7 @@ class IntentDiscoveryService:
         search_lang: str = "en",
         count: int = 10,
         freshness: str = "pm",
-    ) -> tuple[list[object], int, int]:
+    ) -> tuple[list[IntentSignal], int, int]:
         campaign = self.repository.get(Campaign, campaign_id)
         if campaign is None:
             raise ValueError(f"Campaign {campaign_id} does not exist")
@@ -65,7 +65,7 @@ class IntentDiscoveryService:
         if not service:
             raise ValueError("Provide the service to search for")
         queries = _queries(service, place, search_lang)[:4]
-        saved: list[object] = []
+        saved: list[IntentSignal] = []
         seen: set[str] = set()
         ignored = 0
 
@@ -163,8 +163,9 @@ def _parse_age(value: str | None) -> datetime | None:
     normalized = value.strip()
     try:
         parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
-        if parsed.tzinfo is not None:
-            return parsed.astimezone(UTC)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
     except ValueError:
         pass
     match = re.fullmatch(r"(\d+)\s+(minute|hour|day|week|month)s?\s+ago", normalized, re.I)
