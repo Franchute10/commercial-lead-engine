@@ -12,7 +12,7 @@ from lead_engine.cli.common import DatabaseOption, admin_errors, transaction
 from lead_engine.domain.intent_signal import IntentSignal, RequestType, SignalPlatform
 from lead_engine.domain.models import Campaign
 from lead_engine.infrastructure.database import DEFAULT_DATABASE_URL
-from lead_engine.infrastructure.public_search import BraveSearchProvider
+from lead_engine.infrastructure.public_search import TavilySearchProvider
 
 intent_app = typer.Typer(help="Capture and rank explicit service requests.", no_args_is_help=True)
 
@@ -78,7 +78,7 @@ def discover(
     service: Annotated[str, typer.Option("--service", help="Service phrase, for example house cleaning")],
     country: Annotated[str, typer.Option("--country", help="Two-letter search country code")] = "US",
     language: Annotated[str, typer.Option("--language", help="Search language, for example en or es")] = "en",
-    freshness: Annotated[str, typer.Option("--freshness", help="Brave freshness filter: pd, pw, pm, or py")] = "pm",
+    freshness: Annotated[str, typer.Option("--freshness", help="Tavily time range: pd, pw, pm, or py")] = "pm",
     per_query: Annotated[int, typer.Option("--per-query", min=1, max=20)] = 10,
     database_url: DatabaseOption = DEFAULT_DATABASE_URL,
 ) -> None:
@@ -87,7 +87,7 @@ def discover(
         campaign_id = _campaign_id(campaign, database_url)
         with transaction(database_url) as uow:
             records, ignored, query_count = IntentDiscoveryService(
-                uow, BraveSearchProvider()
+                uow, TavilySearchProvider()
             ).discover(
                 campaign_id=campaign_id,
                 service=service,
