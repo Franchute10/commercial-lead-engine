@@ -13,7 +13,7 @@ from lead_engine.domain.errors import DuplicateError
 from lead_engine.domain.identity import normalize_name
 from lead_engine.domain.intent_signal import IntentSignal, RequestType, SignalPlatform
 from lead_engine.domain.models import Campaign
-from lead_engine.infrastructure.public_search import BraveSearchProvider, SearchHit
+from lead_engine.infrastructure.public_search import TavilySearchProvider, SearchHit
 
 
 _REQUEST_PATTERNS = {
@@ -39,10 +39,10 @@ _PROVIDER_LANGUAGE = re.compile(
 class IntentDiscoveryService:
     """Search a public index, retain only request-like evidence, and score candidates."""
 
-    def __init__(self, uow: UnitOfWork, provider: BraveSearchProvider | None = None) -> None:
+    def __init__(self, uow: UnitOfWork, provider: TavilySearchProvider | None = None) -> None:
         self.uow = uow
         self.repository = uow.repository
-        self.provider = provider or BraveSearchProvider()
+        self.provider = provider or TavilySearchProvider()
         self.signals = IntentSignalService(uow)
 
     def discover(
