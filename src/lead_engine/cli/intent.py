@@ -6,11 +6,13 @@ from uuid import UUID
 
 import typer
 
+from lead_engine.application.intent_discovery import IntentDiscoveryService
 from lead_engine.application.intent_signals import IntentSignalService
 from lead_engine.cli.common import DatabaseOption, admin_errors, transaction
 from lead_engine.domain.intent_signal import IntentSignal, RequestType, SignalPlatform
 from lead_engine.domain.models import Campaign
 from lead_engine.infrastructure.database import DEFAULT_DATABASE_URL
+from lead_engine.infrastructure.public_search import BraveSearchProvider
 
 intent_app = typer.Typer(help="Capture and rank explicit service requests.", no_args_is_help=True)
 
@@ -67,6 +69,40 @@ def capture(
             )
             uow.commit()
             typer.echo(record.model_dump_json())
+
+
+
+@intent_app.command("discover")
+def discover(
+    campaign: Annotated[str, typer.Option("--campaign")],
+    service: Annotated[str, typer.Option("--service", help="Service phrase, for example house cleaning")],
+    country: Annotated[str, typer.Option("--country", help="Two-letter search country code")] = "US",
+    language: Annotated[str, typer.Option("--language", help="Search language, for example en or es")] = "en",
+    freshness: Annotated[str, typer.Option("--freshness", help="Brave freshness filter: pd, pw, pm, or py")] = "pm",
+    per_query: Annotated[int, typer.Option("--per-query", min=1, max=20)] = 10,
+    database_url: DatabaseOption = DEFAULT_DATABASE_URL,
+) -> None:
+    """Search indexed public discussions and save qualified service-request candidates."""
+    with admin_errors():
+        campaign_id = _campaign_id(campaign, database_url)
+        with transaction(database_url) as uow:
+            records, ignored, query_count = IntentDiscoveryService(
+                uow, BraveSearchProvider()
+            ).discover(
+                campaign_id=campaign_id,
+                service=service,
+                country_code=country,
+                search_lang=language,
+                count=per_query,
+                freshness=freshness,
+            )
+            uow.commit()
+            typer.echo(
+                f"Searches: {query_count}; captured: {len(records)}; "
+                f"skipped or duplicate: {ignored}"
+            )
+            for record in records:
+                typer.echo(record.model_dump_json())
 
 
 @intent_app.command("list")
