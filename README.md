@@ -486,6 +486,11 @@ This increment establishes the capture, qualification, and persistence path. Aut
 
 Create a campaign with a city or region, then set a Brave Search API key in the environment. The API is optional; check the provider's current commercial terms and pricing before enabling it.
 
+    # Windows PowerShell
+    $env:BRAVE_SEARCH_API_KEY = "your-key"
+    # Windows CMD
+    set BRAVE_SEARCH_API_KEY=your-key
+    # macOS/Linux
     export BRAVE_SEARCH_API_KEY=your-key
     lead-engine db init
     lead-engine intent discover --campaign "Sarasota Cleaning" --service "house cleaning" --country US --language en --freshness pw --per-query 10
