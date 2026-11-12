@@ -470,3 +470,14 @@ per lead, and expose exact denominators, uncertain and unevaluated cases. CSV, J
 exports retain labels and review references. Feedback is separate from commercial Evidence and
 never changes scoring, pipeline, shortlist rules or outreach approval/use. Readiness is tested
 offline; this task does not claim results from a real-company campaign.
+
+
+## Public intent capture (V1)
+
+V1 records and ranks explicit service requests that an operator finds on public pages. It does not crawl Google, Facebook groups, or other platforms, and it does not send outreach. Capture only posts you are allowed to access and retain; keep the source URL and a short, relevant excerpt so each signal can be reviewed.
+
+Use lead-engine intent capture --help for the exact options, then provide the campaign, platform, request type, source URL, requested service, and short evidence excerpt. Optional location and timezone-aware post timestamp improve qualification. Duplicate source URLs are rejected.
+
+Use lead-engine intent list --help to review captured requests for a campaign. The list is ranked by evidence-backed fit; this is a prioritization aid, not proof that a prospect will buy.
+
+This increment establishes the capture, qualification, and persistence path. Automated source integrations require separate provider authorization, terms review, and implementation; no source connectivity is implied by this feature.
