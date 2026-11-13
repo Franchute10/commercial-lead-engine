@@ -131,6 +131,13 @@ def discover(
             help="Use terms after reviewing them with `intent profile --website`",
         ),
     ] = False,
+    show_filtered: Annotated[
+        bool,
+        typer.Option(
+            "--show-filtered",
+            help="Print up to 15 public search results discarded by the intent filters",
+        ),
+    ] = False,
     database_url: DatabaseOption = DEFAULT_DATABASE_URL,
 ) -> None:
     """Search indexed public discussions and save buyer-intent candidates for review."""
@@ -160,6 +167,7 @@ def discover(
                 segment=segment,
                 additional_terms=additional_terms,
                 zones=tuple(zones or ()),
+                show_filtered=show_filtered,
             )
             uow.commit()
             qualified = sum(record.qualified_candidate for record in records)
@@ -170,6 +178,11 @@ def discover(
             )
             typer.echo(f"Source hits: {discovery.search_lane_counts}")
             typer.echo(f"Filter reasons: {discovery.rejection_counts}")
+            if show_filtered and discovery.filtered_samples:
+                typer.echo(
+                    "Filtered samples: "
+                    + json.dumps(discovery.filtered_samples, ensure_ascii=False)
+                )
             for record in records:
                 typer.echo(record.model_dump_json())
 

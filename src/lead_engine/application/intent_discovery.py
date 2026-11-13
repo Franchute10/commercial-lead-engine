@@ -131,6 +131,7 @@ class IntentDiscoveryService:
         segment: str | None = None,
         additional_terms: tuple[str, ...] = (),
         zones: tuple[str, ...] = (),
+        show_filtered: bool = False,
     ) -> tuple[list[IntentSignal], int, int]:
         campaign = self.repository.get(Campaign, campaign_id)
         if campaign is None:
@@ -169,6 +170,20 @@ class IntentDiscoveryService:
             "employment_or_recruiting": 0,
             "duplicate": 0,
         }
+        self.filtered_samples: list[dict[str, str]] = []
+
+        def reject(reason: str, hit: SearchHit, text: str) -> None:
+            self.rejection_counts[reason] += 1
+            if show_filtered and len(self.filtered_samples) < 15:
+                self.filtered_samples.append(
+                    {
+                        "reason": reason,
+                        "title": hit.title[:240],
+                        "url": hit.url,
+                        "excerpt": text[:700],
+                    }
+                )
+
         lane_names = ("public_web", "facebook_groups", "nextdoor_public")
         self.search_lane_counts = {}
 
@@ -187,32 +202,32 @@ class IntentDiscoveryService:
             for hit in hits:
                 if hit.url in seen:
                     ignored += 1
-                    self.rejection_counts["duplicate"] += 1
+                    reject("duplicate", hit, f"{hit.title} {hit.excerpt}".strip())
                     continue
                 seen.add(hit.url)
                 text = f"{hit.title} {hit.excerpt}".strip()
                 request_type = _request_type(text)
                 if request_type is None:
                     ignored += 1
-                    self.rejection_counts["no_request_signal"] += 1
+                    reject("no_request_signal", hit, text)
                     continue
                 # Request classification and buyer context are separate signals. Include
                 # recommendation phrasing here so valid "who do you use?" posts survive.
                 if not _BUYER_CONTEXT.search(text):
                     ignored += 1
-                    self.rejection_counts["no_buyer_context"] += 1
+                    reject("no_buyer_context", hit, text)
                     continue
                 if not _service_matches(service, text):
                     ignored += 1
-                    self.rejection_counts["service_mismatch"] += 1
+                    reject("service_mismatch", hit, text)
                     continue
                 if _PROVIDER_LANGUAGE.search(text) or _PROMOTION_LANGUAGE.search(text):
                     ignored += 1
-                    self.rejection_counts["provider_or_promotion"] += 1
+                    reject("provider_or_promotion", hit, text)
                     continue
                 if _EMPLOYMENT_LANGUAGE.search(text):
                     ignored += 1
-                    self.rejection_counts["employment_or_recruiting"] += 1
+                    reject("employment_or_recruiting", hit, text)
                     continue
                 posted_at = _parse_age(hit.page_age)
                 city = next(
