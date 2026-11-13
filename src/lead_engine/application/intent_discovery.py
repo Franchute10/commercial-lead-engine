@@ -34,8 +34,10 @@ _REQUEST_PATTERNS = {
 }
 _BUYER_CONTEXT = re.compile(
     r"\b(looking for|searching for|seeking|need(?:s)? (?:a|an|some|to hire)?|"
-    r"want to hire|trying to find|can anyone recommend|can anyone suggest|anyone know a|"
-    r"any recommendations|any suggestions|recommendations? for|who do you use|"
+    r"want to hire|looking to hire|trying to find|looking to get|need help with|"
+    r"can anyone recommend|can anyone suggest|anyone know a|anyone have recommendations|"
+    r"does anyone have a recommendation|any recommendations|any suggestions|"
+    r"recommendations? for|who do you use|what company do you use|"
     r"how much|request a quote|quote for|"
     r"estimate for|pricing for|price for|cost for|seeking an estimate|"
     r"busco|buscando|necesito|necesitamos|recomienden|alguien conoce|"
@@ -85,6 +87,7 @@ class IntentDiscoveryService:
         self.provider = provider or TavilySearchProvider()
         self.signals = IntentSignalService(uow)
         self.rejection_counts: dict[str, int] = {}
+        self.search_lane_counts: dict[str, int] = {}
 
     def discover(
         self,
@@ -117,15 +120,24 @@ class IntentDiscoveryService:
             "provider_or_promotion": 0,
             "duplicate": 0,
         }
+        lane_names = ("public_web", "facebook_groups", "reddit")
+        self.search_lane_counts = {}
 
-        for query in queries:
-            for hit in self.provider.search(
+        for lane_index, query in enumerate(queries):
+            hits = self.provider.search(
                 query,
                 country=country_code,
                 search_lang=search_lang,
                 freshness=freshness,
                 count=count,
-            ):
+            )
+            lane_name = (
+                lane_names[lane_index]
+                if lane_index < len(lane_names)
+                else f"lane_{lane_index}"
+            )
+            self.search_lane_counts[lane_name] = len(hits)
+            for hit in hits:
                 if hit.url in seen:
                     ignored += 1
                     self.rejection_counts["duplicate"] += 1

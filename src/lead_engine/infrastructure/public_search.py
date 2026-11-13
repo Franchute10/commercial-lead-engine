@@ -84,6 +84,10 @@ class TavilySearchProvider:
             "include_answer": False,
             "include_raw_content": False,
         }
+        if "site:facebook.com/groups" in query:
+            payload["include_domains"] = ["facebook.com"]
+        elif "site:reddit.com" in query:
+            payload["include_domains"] = ["reddit.com"]
         if country_name:
             payload["country"] = country_name
 

@@ -107,6 +107,7 @@ def discover(
                 f"qualified: {qualified}; review needed: {len(records) - qualified}; "
                 f"filtered or duplicate: {ignored}"
             )
+            typer.echo(f"Source hits: {discovery.search_lane_counts}")
             typer.echo(f"Filter reasons: {discovery.rejection_counts}")
             for record in records:
                 typer.echo(record.model_dump_json())
