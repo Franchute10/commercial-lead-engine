@@ -102,8 +102,20 @@ _SOCIAL_QUERY_VARIANTS = {
     # Keep the social search narrow: this exact vocabulary returned relevant
     # public Facebook posts in the manual Tavily check, while the wider query
     # pushed those posts out of the indexed results.
-    "house cleaning": ("house cleaning", "house cleaner", "maid service", "housekeeping"),
-    "home cleaning": ("home cleaning", "house cleaner", "maid service", "housekeeping"),
+    "house cleaning": (
+        "house cleaning",
+        "house cleaner",
+        "cleaning crew",
+        "maid service",
+        "housekeeping",
+    ),
+    "home cleaning": (
+        "home cleaning",
+        "house cleaner",
+        "cleaning crew",
+        "maid service",
+        "housekeeping",
+    ),
     "cleaning": ("house cleaning", "house cleaner", "maid service"),
 }
 
