@@ -90,9 +90,8 @@ def discover(
     with admin_errors():
         campaign_id = _campaign_id(campaign, database_url)
         with transaction(database_url) as uow:
-            records, ignored, query_count = IntentDiscoveryService(
-                uow, TavilySearchProvider()
-            ).discover(
+            discovery = IntentDiscoveryService(uow, TavilySearchProvider())
+            records, ignored, query_count = discovery.discover(
                 campaign_id=campaign_id,
                 service=service,
                 country_code=country,
@@ -108,6 +107,7 @@ def discover(
                 f"qualified: {qualified}; review needed: {len(records) - qualified}; "
                 f"filtered or duplicate: {ignored}"
             )
+            typer.echo(f"Filter reasons: {discovery.rejection_counts}")
             for record in records:
                 typer.echo(record.model_dump_json())
 

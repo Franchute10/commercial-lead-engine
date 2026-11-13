@@ -22,7 +22,7 @@ _REQUEST_PATTERNS = {
         re.IGNORECASE,
     ),
     RequestType.RECOMMENDATION_REQUEST: re.compile(
-        r"\b(recommend|recommendation|anyone know|who do you use|can anyone suggest|"
+        r"\b(recommendations?|anyone know|who do you use|can anyone suggest|any suggestions|"
         r"recomienden|recomendaci[oó]n|alguien conoce|alguna recomendaci[oó]n)\b",
         re.IGNORECASE,
     ),
@@ -33,9 +33,13 @@ _REQUEST_PATTERNS = {
     ),
 }
 _BUYER_CONTEXT = re.compile(
-    r"\b(i am looking for|i'm looking for|looking for|need(?:s)? (?:a|an|some|to hire)?|"
-    r"want to hire|trying to find|can anyone recommend|anyone know a|how much|"
-    r"busco|buscando|necesito|necesitamos|recomienden|alguien conoce)\b",
+    r"\b(looking for|searching for|seeking|need(?:s)? (?:a|an|some|to hire)?|"
+    r"want to hire|trying to find|can anyone recommend|can anyone suggest|anyone know a|"
+    r"any recommendations|any suggestions|recommendations? for|who do you use|"
+    r"how much|request a quote|quote for|"
+    r"estimate for|pricing for|price for|cost for|seeking an estimate|"
+    r"busco|buscando|necesito|necesitamos|recomienden|alguien conoce|"
+    r"alguna recomendaci[oó]n|recomendaciones? para)\b",
     re.IGNORECASE,
 )
 _PROVIDER_LANGUAGE = re.compile(
@@ -65,6 +69,11 @@ _SERVICE_ALIASES = {
         r"residential clean(?:ing|er|ers)?|maid service|housekeeping)\b"
     ),
 }
+_SERVICE_QUERY_VARIANTS = {
+    "house cleaning": ("house cleaning", "house cleaner", "maid service", "housekeeping"),
+    "home cleaning": ("home cleaning", "house cleaner", "maid service", "housekeeping"),
+    "cleaning": ("house cleaning", "house cleaner", "maid service"),
+}
 
 
 class IntentDiscoveryService:
@@ -75,6 +84,7 @@ class IntentDiscoveryService:
         self.repository = uow.repository
         self.provider = provider or TavilySearchProvider()
         self.signals = IntentSignalService(uow)
+        self.rejection_counts: dict[str, int] = {}
 
     def discover(
         self,
@@ -100,6 +110,13 @@ class IntentDiscoveryService:
         saved: list[IntentSignal] = []
         seen: set[str] = set()
         ignored = 0
+        self.rejection_counts = {
+            "no_request_signal": 0,
+            "no_buyer_context": 0,
+            "service_mismatch": 0,
+            "provider_or_promotion": 0,
+            "duplicate": 0,
+        }
 
         for query in queries:
             for hit in self.provider.search(
@@ -110,18 +127,29 @@ class IntentDiscoveryService:
                 count=count,
             ):
                 if hit.url in seen:
+                    ignored += 1
+                    self.rejection_counts["duplicate"] += 1
                     continue
                 seen.add(hit.url)
                 text = f"{hit.title} {hit.excerpt}".strip()
                 request_type = _request_type(text)
-                if (
-                    request_type is None
-                    or not _BUYER_CONTEXT.search(text)
-                    or not _service_matches(service, text)
-                    or _PROVIDER_LANGUAGE.search(text)
-                    or _PROMOTION_LANGUAGE.search(text)
-                ):
+                if request_type is None:
                     ignored += 1
+                    self.rejection_counts["no_request_signal"] += 1
+                    continue
+                # Request classification and buyer context are separate signals. Include
+                # recommendation phrasing here so valid "who do you use?" posts survive.
+                if not _BUYER_CONTEXT.search(text):
+                    ignored += 1
+                    self.rejection_counts["no_buyer_context"] += 1
+                    continue
+                if not _service_matches(service, text):
+                    ignored += 1
+                    self.rejection_counts["service_mismatch"] += 1
+                    continue
+                if _PROVIDER_LANGUAGE.search(text) or _PROMOTION_LANGUAGE.search(text):
+                    ignored += 1
+                    self.rejection_counts["provider_or_promotion"] += 1
                     continue
                 posted_at = _parse_age(hit.page_age)
                 city = _place_match(campaign.city, text)
@@ -143,20 +171,23 @@ class IntentDiscoveryService:
                     )
                 except DuplicateError:
                     ignored += 1
+                    self.rejection_counts["duplicate"] += 1
                     continue
                 saved.append(record)
         return saved, ignored, len(queries)
 
 
 def _queries(service: str, place: str, search_lang: str, segment: str | None = None) -> list[str]:
-    """Build separate, source-specific lanes for an explicit service and market segment."""
+    """Build source lanes using common service names and buyer-intent language."""
     qualifier = f'"{segment}" ' if segment else ""
+    variants = _SERVICE_QUERY_VARIANTS.get(normalize_name(service), (service,))
+    service_terms = " OR ".join(f'"{term}"' for term in variants)
     intent = (
-        '("need" OR "looking for" OR "recommend" OR "quote" OR "estimate" OR "anyone know")'
+        '"looking for" OR need OR recommend OR recommendation OR "who do you use" OR quote'
         if search_lang.lower().startswith("en")
-        else '("necesito" OR "busco" OR "cotización" OR "recomienden" OR "alguien conoce")'
+        else '"busco" OR necesito OR recomienden OR recomendación OR cotización'
     )
-    core = f'"{service}" "{place}" {qualifier}{intent}'
+    core = f'({service_terms}) "{place}" {qualifier}({intent})'
     return [
         core,
         f'site:facebook.com/groups {core}',
