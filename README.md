@@ -493,9 +493,9 @@ Create a campaign with a city or region, then set a Tavily API key in the enviro
     # macOS/Linux
     export TAVILY_API_KEY=your-key
     lead-engine db init
-    lead-engine intent discover --campaign "Sarasota Cleaning" --service "house cleaning" --country US --language en --freshness pw --per-query 10
+    lead-engine intent discover --campaign "Sarasota Cleaning" --service "house cleaning" --segment "homeowners" --country US --language en --freshness pw --per-query 10
     lead-engine intent list --campaign "Sarasota Cleaning"
 
-For Spanish-language searches use --language es and the appropriate two-letter country code, such as PE. Each run issues at most three searches (general web, indexed Facebook group pages, indexed Reddit pages), with up to 20 results each. It stores results whose title or excerpt contains a request signal, along with the source URL and excerpt. Missing date or location evidence leaves a candidate unqualified for human review. Search results do not prove that the author is reachable or still needs the service.
+For Spanish-language searches use --language es and the appropriate two-letter country code, such as PE. Each run issues three searches: a general web query, public Facebook group pages, and Reddit. Set --segment to focus the query on a buyer group such as "homeowners" or "property managers"; use a separate run/campaign for each segment and service area. The filter rejects provider promotions, requires buyer-request language and a service-specific match, and reports qualified candidates separately from candidates needing review. A candidate is qualified only when the post date is known and recent and the location is evidenced in the indexed text. Tavily search metadata alone does not prove that the author is reachable or still needs the service. Private/login-only groups remain out of scope.
 
 Tavily's free Researcher plan currently includes 1,000 credits per month and does not require a credit card. Paid usage is optional; check current limits and pricing before enabling it. See [Tavily pricing](https://www.tavily.com/pricing) and the [Search API documentation](https://docs.tavily.com/documentation/api-reference/endpoint/search). Coverage depends on Tavily's index; Facebook group coverage is not guaranteed.
