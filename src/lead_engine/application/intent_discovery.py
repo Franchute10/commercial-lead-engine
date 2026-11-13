@@ -41,7 +41,8 @@ _BUYER_CONTEXT = re.compile(
 _PROVIDER_LANGUAGE = re.compile(
     r"\b(we offer|our services|call us|book now|serving [a-z]|now accepting clients|"
     r"new clients welcome|check out our|contact us|locally owned|family owned|"
-    r"i own a|we are a|we're a|my company|our company|ofrecemos|ll[aá]manos|"
+    r"i own a|we are a|we're a|my company|our company|i am a professional|professional cleaner|"
+    r"available for bookings|book your cleaning|ofrecemos|ll[aá]manos|"
     r"contrata ahora|nuevos clientes|agenda ahora)\b",
     re.IGNORECASE,
 )
@@ -151,9 +152,9 @@ def _queries(service: str, place: str, search_lang: str, segment: str | None = N
     """Build separate, source-specific lanes for an explicit service and market segment."""
     qualifier = f'"{segment}" ' if segment else ""
     intent = (
-        '("need" OR "looking for" OR "recommend" OR "anyone know")'
+        '("need" OR "looking for" OR "recommend" OR "quote" OR "estimate" OR "anyone know")'
         if search_lang.lower().startswith("en")
-        else '("necesito" OR "busco" OR "recomienden" OR "alguien conoce")'
+        else '("necesito" OR "busco" OR "cotización" OR "recomienden" OR "alguien conoce")'
     )
     core = f'"{service}" "{place}" {qualifier}{intent}'
     return [
