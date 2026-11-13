@@ -91,6 +91,14 @@ _SERVICE_QUERY_VARIANTS = {
     ),
     "cleaning": ("house cleaning", "house cleaner", "cleaning crew", "maid service"),
 }
+_SOCIAL_QUERY_VARIANTS = {
+    # Keep the social search narrow: this exact vocabulary returned relevant
+    # public Facebook posts in the manual Tavily check, while the wider query
+    # pushed those posts out of the indexed results.
+    "house cleaning": ("house cleaning", "house cleaner", "maid service", "housekeeping"),
+    "home cleaning": ("home cleaning", "house cleaner", "maid service", "housekeeping"),
+    "cleaning": ("house cleaning", "house cleaner", "maid service"),
+}
 
 
 class IntentDiscoveryService:
@@ -209,15 +217,18 @@ def _queries(service: str, place: str, search_lang: str, segment: str | None = N
     qualifier = f'"{segment}" ' if segment else ""
     variants = _SERVICE_QUERY_VARIANTS.get(normalize_name(service), (service,))
     service_terms = " OR ".join(f'"{term}"' for term in variants)
+    social_variants = _SOCIAL_QUERY_VARIANTS.get(normalize_name(service), variants)
+    social_service_terms = " OR ".join(f'"{term}"' for term in social_variants)
     intent = (
         '"looking for" OR need OR recommend OR recommendation OR "who do you use" OR quote'
         if search_lang.lower().startswith("en")
         else '"busco" OR necesito OR recomienden OR recomendación OR cotización'
     )
     core = f'({service_terms}) "{place}" {qualifier}({intent})'
+    social_core = f'({social_service_terms}) "{place}" {qualifier}({intent})'
     return [
         core,
-        f'site:facebook.com/groups {core}',
+        f'site:facebook.com/groups {social_core}',
         f'site:reddit.com {core}',
     ]
 
