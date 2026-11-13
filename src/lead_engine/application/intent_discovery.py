@@ -84,6 +84,7 @@ class IntentDiscoveryService:
         search_lang: str = "en",
         count: int = 10,
         freshness: str = "pm",
+        segment: str | None = None,
     ) -> tuple[list[IntentSignal], int, int]:
         campaign = self.repository.get(Campaign, campaign_id)
         if campaign is None:
@@ -94,7 +95,7 @@ class IntentDiscoveryService:
         service = service.strip()
         if not service:
             raise ValueError("Provide the service to search for")
-        queries = _queries(service, place, search_lang, segment=campaign.subindustry or campaign.industry)
+        queries = _queries(service, place, search_lang, segment=segment)
         saved: list[IntentSignal] = []
         seen: set[str] = set()
         ignored = 0
