@@ -122,6 +122,8 @@ class IntentDiscoveryService:
         count: int = 10,
         freshness: str = "pm",
         segment: str | None = None,
+        additional_terms: tuple[str, ...] = (),
+        zones: tuple[str, ...] = (),
     ) -> tuple[list[IntentSignal], int, int]:
         campaign = self.repository.get(Campaign, campaign_id)
         if campaign is None:
@@ -132,7 +134,23 @@ class IntentDiscoveryService:
         service = service.strip()
         if not service:
             raise ValueError("Provide the service to search for")
-        queries = _queries(service, place, search_lang, segment=segment)
+        if len(zones) > 4:
+            raise ValueError("Use at most four additional zones per discovery run")
+        places = tuple(
+            dict.fromkeys(
+                value.strip()
+                for value in (place, *zones)
+                if value and value.strip()
+            )
+        )
+        queries = _queries(
+            service,
+            places[0],
+            search_lang,
+            segment=segment,
+            additional_terms=additional_terms,
+            additional_places=places[1:],
+        )
         saved: list[IntentSignal] = []
         seen: set[str] = set()
         ignored = 0
@@ -143,10 +161,10 @@ class IntentDiscoveryService:
             "provider_or_promotion": 0,
             "duplicate": 0,
         }
-        lane_names = ("public_web", "facebook_groups", "reddit")
+        lane_names = ("public_web", "facebook_groups", "nextdoor_public")
         self.search_lane_counts = {}
 
-        for lane_index, query in enumerate(queries):
+        for query_index, query in enumerate(queries):
             hits = self.provider.search(
                 query,
                 country=country_code,
@@ -154,12 +172,10 @@ class IntentDiscoveryService:
                 freshness=freshness,
                 count=count,
             )
-            lane_name = (
-                lane_names[lane_index]
-                if lane_index < len(lane_names)
-                else f"lane_{lane_index}"
+            lane_name = lane_names[query_index % len(lane_names)]
+            self.search_lane_counts[lane_name] = (
+                self.search_lane_counts.get(lane_name, 0) + len(hits)
             )
-            self.search_lane_counts[lane_name] = len(hits)
             for hit in hits:
                 if hit.url in seen:
                     ignored += 1
@@ -187,7 +203,10 @@ class IntentDiscoveryService:
                     self.rejection_counts["provider_or_promotion"] += 1
                     continue
                 posted_at = _parse_age(hit.page_age)
-                city = _place_match(campaign.city, text)
+                city = next(
+                    (matched for value in places if (matched := _place_match(value, text))),
+                    None,
+                )
                 region = _place_match(campaign.region, text)
                 country = _place_match(campaign.country, text)
                 platform = _platform(hit.url)
@@ -203,6 +222,7 @@ class IntentDiscoveryService:
                         region=region,
                         country=country,
                         posted_at=posted_at,
+                        eligible_places=places,
                     )
                 except DuplicateError:
                     ignored += 1
@@ -212,25 +232,53 @@ class IntentDiscoveryService:
         return saved, ignored, len(queries)
 
 
-def _queries(service: str, place: str, search_lang: str, segment: str | None = None) -> list[str]:
+def _queries(
+    service: str,
+    place: str,
+    search_lang: str,
+    segment: str | None = None,
+    additional_terms: tuple[str, ...] = (),
+    additional_places: tuple[str, ...] = (),
+) -> list[str]:
     """Build source lanes using common service names and buyer-intent language."""
     qualifier = f'"{segment}" ' if segment else ""
     variants = _SERVICE_QUERY_VARIANTS.get(normalize_name(service), (service,))
+    safe_terms = _safe_query_terms(additional_terms)
+    variants = tuple(dict.fromkeys((*variants, *safe_terms[:3])))
     service_terms = " OR ".join(f'"{term}"' for term in variants)
     social_variants = _SOCIAL_QUERY_VARIANTS.get(normalize_name(service), variants)
+    social_variants = tuple(dict.fromkeys((*social_variants, *safe_terms[:2])))
     social_service_terms = " OR ".join(f'"{term}"' for term in social_variants)
     intent = (
         '"looking for" OR need OR recommend OR recommendation OR "who do you use" OR quote'
         if search_lang.lower().startswith("en")
         else '"busco" OR necesito OR recomienden OR recomendación OR cotización'
     )
-    core = f'({service_terms}) "{place}" {qualifier}({intent})'
-    social_core = f'({social_service_terms}) "{place}" {qualifier}({intent})'
-    return [
-        core,
-        f'site:facebook.com/groups {social_core}',
-        f'site:reddit.com {core}',
-    ]
+    queries: list[str] = []
+    for search_place in dict.fromkeys((place, *additional_places)):
+        core = f'({service_terms}) "{search_place}" {qualifier}({intent})'
+        social_core = f'({social_service_terms}) "{search_place}" {qualifier}({intent})'
+        queries.extend(
+            (
+                core,
+                f'site:facebook.com/groups {social_core}',
+                f'site:nextdoor.com {social_core}',
+            )
+        )
+    return queries
+
+
+def _safe_query_terms(terms: tuple[str, ...]) -> tuple[str, ...]:
+    candidates: list[str] = []
+    for term in terms:
+        cleaned = re.sub(r"[^\w &'-]", " ", term, flags=re.UNICODE)
+        cleaned = " ".join(cleaned.split()).strip(" -'&")[:45]
+        if (
+            2 <= len(cleaned.split()) <= 8
+            and cleaned.casefold() not in {value.casefold() for value in candidates}
+        ):
+            candidates.append(cleaned)
+    return tuple(candidates)
 
 def _request_type(text: str) -> RequestType | None:
     for request_type in (
@@ -268,6 +316,8 @@ def _platform(url: str) -> SignalPlatform:
     host = (urlparse(url).hostname or "").lower()
     if host.endswith("facebook.com") and "/groups/" in urlparse(url).path:
         return SignalPlatform.FACEBOOK_GROUP
+    if host.endswith("nextdoor.com"):
+        return SignalPlatform.NEXTDOOR
     if host.endswith("reddit.com"):
         return SignalPlatform.REDDIT
     return SignalPlatform.PUBLIC_WEB

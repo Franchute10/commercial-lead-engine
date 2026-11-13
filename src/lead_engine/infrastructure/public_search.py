@@ -86,8 +86,8 @@ class TavilySearchProvider:
         }
         if "site:facebook.com/groups" in query:
             payload["include_domains"] = ["facebook.com"]
-        elif "site:reddit.com" in query:
-            payload["include_domains"] = ["reddit.com"]
+        elif "site:nextdoor.com" in query:
+            payload["include_domains"] = ["nextdoor.com"]
         if country_name:
             payload["country"] = country_name
 

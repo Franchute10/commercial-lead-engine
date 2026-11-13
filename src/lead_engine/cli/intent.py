@@ -1,5 +1,7 @@
 """Capture explicit service requests from public sources; no crawling or outreach."""
 
+import json
+from dataclasses import asdict
 from datetime import datetime
 from typing import Annotated
 from uuid import UUID
@@ -13,8 +15,35 @@ from lead_engine.domain.intent_signal import IntentSignal, RequestType, SignalPl
 from lead_engine.domain.models import Campaign
 from lead_engine.infrastructure.database import DEFAULT_DATABASE_URL
 from lead_engine.infrastructure.public_search import TavilySearchProvider
+from lead_engine.infrastructure.website.http_fetcher import HttpxFetcher
+from lead_engine.infrastructure.website.search_terms import (
+    WebsiteSearchProfile,
+    extract_website_search_profile,
+)
 
 intent_app = typer.Typer(help="Capture and rank explicit service requests.", no_args_is_help=True)
+
+
+def _website_profile(website: str) -> WebsiteSearchProfile:
+    fetcher = HttpxFetcher()
+    try:
+        result = fetcher.fetch(website)
+    finally:
+        fetcher.close()
+    if result.error_code or result.http_status is None or not 200 <= result.http_status < 300:
+        raise ValueError(
+            f"Could not read the public website ({result.error_code or result.http_status})"
+        )
+    return extract_website_search_profile(result.final_url or website, result.body)
+
+
+@intent_app.command("profile")
+def profile(
+    website: Annotated[str, typer.Option("--website", help="Public business website URL")],
+) -> None:
+    """Extract reviewable service phrases from a public website's title and headings."""
+    with admin_errors():
+        typer.echo(json.dumps(asdict(_website_profile(website)), ensure_ascii=False))
 
 
 def _campaign_id(value: str, database_url: str) -> UUID:
@@ -84,10 +113,40 @@ def discover(
     language: Annotated[str, typer.Option("--language", help="Search language, for example en or es")] = "en",
     freshness: Annotated[str, typer.Option("--freshness", help="Tavily time range: pd, pw, pm, or py")] = "pm",
     per_query: Annotated[int, typer.Option("--per-query", min=1, max=20)] = 10,
+    zones: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--zone",
+            help="Additional service-area city or neighborhood; repeat up to four times",
+        ),
+    ] = None,
+    website: Annotated[
+        str | None,
+        typer.Option("--website", help="Public business website whose phrases expand searches"),
+    ] = None,
+    include_website_terms: Annotated[
+        bool,
+        typer.Option(
+            "--include-website-terms",
+            help="Use terms after reviewing them with `intent profile --website`",
+        ),
+    ] = False,
     database_url: DatabaseOption = DEFAULT_DATABASE_URL,
 ) -> None:
     """Search indexed public discussions and save buyer-intent candidates for review."""
     with admin_errors():
+        if include_website_terms and not website:
+            raise ValueError("--include-website-terms requires --website")
+        if website and not include_website_terms:
+            raise ValueError(
+                "Review terms first with `intent profile --website URL`, then pass "
+                "--include-website-terms"
+            )
+        additional_terms = _website_profile(website).keyword_candidates if website else ()
+        if additional_terms:
+            typer.echo("Website phrases used: " + json.dumps(additional_terms, ensure_ascii=False))
+        if zones:
+            typer.echo("Additional search zones: " + json.dumps(zones, ensure_ascii=False))
         campaign_id = _campaign_id(campaign, database_url)
         with transaction(database_url) as uow:
             discovery = IntentDiscoveryService(uow, TavilySearchProvider())
@@ -99,6 +158,8 @@ def discover(
                 count=per_query,
                 freshness=freshness,
                 segment=segment,
+                additional_terms=additional_terms,
+                zones=tuple(zones or ()),
             )
             uow.commit()
             qualified = sum(record.qualified_candidate for record in records)

@@ -27,6 +27,7 @@ class IntentSignalService:
         region: str | None = None,
         country: str | None = None,
         posted_at: datetime | None = None,
+        eligible_places: tuple[str, ...] = (),
     ) -> IntentSignal:
         campaign = self.repository.get(Campaign, campaign_id)
         if campaign is None:
@@ -58,7 +59,13 @@ class IntentSignalService:
             points += 20
             reasons.append("Service requested is identified: +20")
 
-        expected_places = [campaign.city, campaign.region, campaign.country, campaign.geography]
+        expected_places = [
+            campaign.city,
+            campaign.region,
+            campaign.country,
+            campaign.geography,
+            *eligible_places,
+        ]
         actual_places = [candidate.city, candidate.region, candidate.country]
         normalized_actual = [normalize_name(value or "") for value in actual_places]
         matched_place = any(
