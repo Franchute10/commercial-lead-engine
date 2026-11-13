@@ -6,8 +6,7 @@ opportunity with absence of a website. Important conclusions are stored as attri
 
 The current version provides a typed domain, SQLite persistence, Alembic migrations, application
 services, Scout CSV/demo discovery, bounded website auditing, commercial scoring and a manual admin CLI.
-It performs no deep crawling, external discovery API calls, AI inference,
-LinkedIn automation or automatic outreach. No paid service, API key, Airtable, n8n or Streamlit is required.
+It performs no deep crawling, AI inference, LinkedIn automation or automatic outreach. Public intent discovery is an optional, bounded Tavily Search API integration; it searches indexed pages and discussions, not private or login-only content.
 Human approval remains required before outreach; interaction records only track human actions.
 
 ## Setup
@@ -470,3 +469,33 @@ per lead, and expose exact denominators, uncertain and unevaluated cases. CSV, J
 exports retain labels and review references. Feedback is separate from commercial Evidence and
 never changes scoring, pipeline, shortlist rules or outreach approval/use. Readiness is tested
 offline; this task does not claim results from a real-company campaign.
+
+
+## Public intent capture (V1)
+
+V1 records and ranks explicit service requests that an operator finds on public pages. It queries Tavily's public web index for recent pages and discussions. Results from Facebook groups appear only when they are publicly indexed and accessible; the retired Groups API is not used. It does not enter accounts, fetch closed-group content, or send outreach. Capture only posts you are allowed to access and retain; keep the source URL and a short, relevant excerpt so each signal can be reviewed.
+
+Use lead-engine intent capture --help for the exact options, then provide the campaign, platform, request type, source URL, requested service, and short evidence excerpt. Optional location and timezone-aware post timestamp improve qualification. Duplicate source URLs are rejected.
+
+Use lead-engine intent list --help to review captured requests for a campaign. The list is ranked by evidence-backed fit; this is a prioritization aid, not proof that a prospect will buy.
+
+This increment establishes the capture, qualification, and persistence path. Automated source integrations require separate provider authorization, terms review, and implementation; no source connectivity is implied by this feature.
+
+
+### Run public intent discovery
+
+Create a campaign with a city or region, then set a Tavily API key in the environment. The API is optional; check the provider's current commercial terms and pricing before enabling it.
+
+    # Windows PowerShell
+    $env:TAVILY_API_KEY = "your-key"
+    # Windows CMD
+    set TAVILY_API_KEY=your-key
+    # macOS/Linux
+    export TAVILY_API_KEY=your-key
+    lead-engine db init
+    lead-engine intent discover --campaign "Sarasota Cleaning" --service "house cleaning" --segment "homeowners" --country US --language en --freshness pw --per-query 10
+    lead-engine intent list --campaign "Sarasota Cleaning"
+
+For Spanish-language searches use --language es and the appropriate two-letter country code, such as PE. Each run issues three searches: a general web query, public Facebook group pages, and Reddit. Set --segment to focus the query on a buyer group such as "homeowners" or "property managers"; use a separate run/campaign for each segment and service area. The filter rejects provider promotions, requires buyer-request language and a service-specific match, and reports qualified candidates separately from candidates needing review. A candidate is qualified only when the post date is known and recent and the location is evidenced in the indexed text. Tavily search metadata alone does not prove that the author is reachable or still needs the service. Private/login-only groups remain out of scope.
+
+Tavily's free Researcher plan currently includes 1,000 credits per month and does not require a credit card. Paid usage is optional; check current limits and pricing before enabling it. See [Tavily pricing](https://www.tavily.com/pricing) and the [Search API documentation](https://docs.tavily.com/documentation/api-reference/endpoint/search). Coverage depends on Tavily's index; Facebook group coverage is not guaranteed.
