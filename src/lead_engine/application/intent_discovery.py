@@ -57,6 +57,13 @@ _PROMOTION_LANGUAGE = re.compile(
     r"licensed and insured|#smallbusiness|#supportlocal)\b",
     re.IGNORECASE,
 )
+_EMPLOYMENT_LANGUAGE = re.compile(
+    r"\b(part[- ]time|full[- ]time|contractor role|jobs? in [a-z]|"
+    r"(?:house|home|office) ?cleaners? jobs?|housekeeper jobs?|"
+    r"hiring (?:a |an )?(?:cleaner|housekeeper)|now hiring|we're hiring|"
+    r"apply now|job description|job opening|careers|salary|hourly pay|per week)\b",
+    re.IGNORECASE,
+)
 _SERVICE_ALIASES = {
     "house cleaning": (
         r"\b(house ?clean(?:ing|er|ers)?|home ?clean(?:ing|er|ers)?|"
@@ -159,6 +166,7 @@ class IntentDiscoveryService:
             "no_buyer_context": 0,
             "service_mismatch": 0,
             "provider_or_promotion": 0,
+            "employment_or_recruiting": 0,
             "duplicate": 0,
         }
         lane_names = ("public_web", "facebook_groups", "nextdoor_public")
@@ -201,6 +209,10 @@ class IntentDiscoveryService:
                 if _PROVIDER_LANGUAGE.search(text) or _PROMOTION_LANGUAGE.search(text):
                     ignored += 1
                     self.rejection_counts["provider_or_promotion"] += 1
+                    continue
+                if _EMPLOYMENT_LANGUAGE.search(text):
+                    ignored += 1
+                    self.rejection_counts["employment_or_recruiting"] += 1
                     continue
                 posted_at = _parse_age(hit.page_age)
                 city = next(
@@ -307,7 +319,9 @@ def _service_matches(service: str, text: str) -> bool:
     )
 
 def _place_match(place: str | None, text: str) -> str | None:
-    if place and normalize_name(place) in normalize_name(text):
+    normalized_place = normalize_name(place or "")
+    normalized_text = normalize_name(text)
+    if normalized_place and f" {normalized_place} " in f" {normalized_text} ":
         return place
     return None
 
