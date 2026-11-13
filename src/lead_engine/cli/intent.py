@@ -76,13 +76,17 @@ def capture(
 def discover(
     campaign: Annotated[str, typer.Option("--campaign")],
     service: Annotated[str, typer.Option("--service", help="Service phrase, for example house cleaning")],
+    segment: Annotated[
+        str | None,
+        typer.Option("--segment", help="Target buyer segment, e.g. homeowners or property managers"),
+    ] = None,
     country: Annotated[str, typer.Option("--country", help="Two-letter search country code")] = "US",
     language: Annotated[str, typer.Option("--language", help="Search language, for example en or es")] = "en",
     freshness: Annotated[str, typer.Option("--freshness", help="Tavily time range: pd, pw, pm, or py")] = "pm",
     per_query: Annotated[int, typer.Option("--per-query", min=1, max=20)] = 10,
     database_url: DatabaseOption = DEFAULT_DATABASE_URL,
 ) -> None:
-    """Search indexed public discussions and save qualified service-request candidates."""
+    """Search indexed public discussions and save buyer-intent candidates for review."""
     with admin_errors():
         campaign_id = _campaign_id(campaign, database_url)
         with transaction(database_url) as uow:
@@ -95,11 +99,14 @@ def discover(
                 search_lang=language,
                 count=per_query,
                 freshness=freshness,
+                segment=segment,
             )
             uow.commit()
+            qualified = sum(record.qualified_candidate for record in records)
             typer.echo(
-                f"Searches: {query_count}; captured: {len(records)}; "
-                f"skipped or duplicate: {ignored}"
+                f"Searches: {query_count}; candidates: {len(records)}; "
+                f"qualified: {qualified}; review needed: {len(records) - qualified}; "
+                f"filtered or duplicate: {ignored}"
             )
             for record in records:
                 typer.echo(record.model_dump_json())
