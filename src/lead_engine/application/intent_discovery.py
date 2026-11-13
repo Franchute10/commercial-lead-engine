@@ -60,21 +60,36 @@ _PROMOTION_LANGUAGE = re.compile(
 _SERVICE_ALIASES = {
     "house cleaning": (
         r"\b(house ?clean(?:ing|er|ers)?|home ?clean(?:ing|er|ers)?|"
-        r"residential clean(?:ing|er|ers)?|maid service|housekeeping)\b"
+        r"residential clean(?:ing|er|ers)?|cleaning crews?|cleaning teams?|"
+        r"cleaning compan(?:y|ies)|maid service|housekeeping)\b"
     ),
     "home cleaning": (
         r"\b(house ?clean(?:ing|er|ers)?|home ?clean(?:ing|er|ers)?|"
-        r"residential clean(?:ing|er|ers)?|maid service|housekeeping)\b"
+        r"residential clean(?:ing|er|ers)?|cleaning crews?|cleaning teams?|"
+        r"cleaning compan(?:y|ies)|maid service|housekeeping)\b"
     ),
     "cleaning": (
         r"\b(cleaning service|house ?clean(?:ing|er|ers)?|home ?clean(?:ing|er|ers)?|"
-        r"residential clean(?:ing|er|ers)?|maid service|housekeeping)\b"
+        r"residential clean(?:ing|er|ers)?|cleaning crews?|cleaning teams?|"
+        r"cleaning compan(?:y|ies)|maid service|housekeeping)\b"
     ),
 }
 _SERVICE_QUERY_VARIANTS = {
-    "house cleaning": ("house cleaning", "house cleaner", "maid service", "housekeeping"),
-    "home cleaning": ("home cleaning", "house cleaner", "maid service", "housekeeping"),
-    "cleaning": ("house cleaning", "house cleaner", "maid service"),
+    "house cleaning": (
+        "house cleaning",
+        "house cleaner",
+        "cleaning crew",
+        "maid service",
+        "housekeeping",
+    ),
+    "home cleaning": (
+        "home cleaning",
+        "house cleaner",
+        "cleaning crew",
+        "maid service",
+        "housekeeping",
+    ),
+    "cleaning": ("house cleaning", "house cleaner", "cleaning crew", "maid service"),
 }
 
 
@@ -255,7 +270,11 @@ def _parse_age(value: str | None) -> datetime | None:
         parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=UTC)
-        return parsed.astimezone(UTC)
+        parsed = parsed.astimezone(UTC)
+        # Search indexes can expose malformed or future publication dates. Treat
+        # those as unknown instead of letting them invalidate an otherwise useful
+        # signal when it is captured.
+        return None if parsed > datetime.now(UTC) else parsed
     except ValueError:
         pass
     match = re.fullmatch(r"(\d+)\s+(minute|hour|day|week|month)s?\s+ago", normalized, re.I)
