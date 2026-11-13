@@ -18,22 +18,52 @@ from lead_engine.infrastructure.public_search import TavilySearchProvider, Searc
 
 _REQUEST_PATTERNS = {
     RequestType.QUOTE_REQUEST: re.compile(
-        r"\b(quote|estimate|pricing|how much|presupuesto|cotizaci[oó]n|cu[aá]nto cuesta)\b",
+        r"\b(quote|estimate|pricing|how much|cost|presupuesto|cotizaci[oó]n|cu[aá]nto cuesta)\b",
         re.IGNORECASE,
     ),
     RequestType.RECOMMENDATION_REQUEST: re.compile(
-        r"\b(recommend|recommendation|anyone know|who do you use|recomienden|recomendaci[oó]n|alguien conoce)\b",
+        r"\b(recommend|recommendation|anyone know|who do you use|can anyone suggest|"
+        r"recomienden|recomendaci[oó]n|alguien conoce|alguna recomendaci[oó]n)\b",
         re.IGNORECASE,
     ),
     RequestType.SERVICE_REQUEST: re.compile(
-        r"\b(need|looking for|searching for|seeking|hire|want to hire|necesito|busco|buscando|requiero)\b",
+        r"\b(looking for|searching for|seeking|need(?:s)?|want to hire|hiring|"
+        r"busco|buscando|necesito|necesitamos|requiero)\b",
         re.IGNORECASE,
     ),
 }
-_PROVIDER_LANGUAGE = re.compile(
-    r"\b(we offer|our services|call us|book now|serving [a-z]|ofrecemos|ll[aá]manos|contrata ahora)\b",
+_BUYER_CONTEXT = re.compile(
+    r"\b(i am looking for|i'm looking for|looking for|need(?:s)? (?:a|an|some|to hire)?|"
+    r"want to hire|trying to find|can anyone recommend|anyone know a|how much|"
+    r"busco|buscando|necesito|necesitamos|recomienden|alguien conoce)\b",
     re.IGNORECASE,
 )
+_PROVIDER_LANGUAGE = re.compile(
+    r"\b(we offer|our services|call us|book now|serving [a-z]|now accepting clients|"
+    r"new clients welcome|check out our|contact us|locally owned|family owned|"
+    r"i own a|we are a|we're a|my company|our company|ofrecemos|ll[aá]manos|"
+    r"contrata ahora|nuevos clientes|agenda ahora)\b",
+    re.IGNORECASE,
+)
+_PROMOTION_LANGUAGE = re.compile(
+    r"\b(discount|special offer|coupon|promo code|limited time|free quote|"
+    r"licensed and insured|#smallbusiness|#supportlocal)\b",
+    re.IGNORECASE,
+)
+_SERVICE_ALIASES = {
+    "house cleaning": (
+        r"\b(house ?clean(?:ing|er|ers)?|home ?clean(?:ing|er|ers)?|"
+        r"residential clean(?:ing|er|ers)?|maid service|housekeeping)\b"
+    ),
+    "home cleaning": (
+        r"\b(house ?clean(?:ing|er|ers)?|home ?clean(?:ing|er|ers)?|"
+        r"residential clean(?:ing|er|ers)?|maid service|housekeeping)\b"
+    ),
+    "cleaning": (
+        r"\b(cleaning service|house ?clean(?:ing|er|ers)?|home ?clean(?:ing|er|ers)?|"
+        r"residential clean(?:ing|er|ers)?|maid service|housekeeping)\b"
+    ),
+}
 
 
 class IntentDiscoveryService:
@@ -64,7 +94,7 @@ class IntentDiscoveryService:
         service = service.strip()
         if not service:
             raise ValueError("Provide the service to search for")
-        queries = _queries(service, place, search_lang)[:4]
+        queries = _queries(service, place, search_lang, segment=campaign.subindustry or campaign.industry)
         saved: list[IntentSignal] = []
         seen: set[str] = set()
         ignored = 0
@@ -82,10 +112,13 @@ class IntentDiscoveryService:
                 seen.add(hit.url)
                 text = f"{hit.title} {hit.excerpt}".strip()
                 request_type = _request_type(text)
-                if request_type is None or not _service_matches(service, text):
-                    ignored += 1
-                    continue
-                if _PROVIDER_LANGUAGE.search(text):
+                if (
+                    request_type is None
+                    or not _BUYER_CONTEXT.search(text)
+                    or not _service_matches(service, text)
+                    or _PROVIDER_LANGUAGE.search(text)
+                    or _PROMOTION_LANGUAGE.search(text)
+                ):
                     ignored += 1
                     continue
                 posted_at = _parse_age(hit.page_age)
@@ -113,17 +146,20 @@ class IntentDiscoveryService:
         return saved, ignored, len(queries)
 
 
-def _queries(service: str, place: str, search_lang: str) -> list[str]:
-    if search_lang.lower().startswith("es"):
-        general = f'"necesito" OR "busco" "{service}" "{place}"'
-        facebook = f'site:facebook.com/groups "{service}" ("necesito" OR "busco" OR "recomienden") "{place}"'
-        reddit = f'site:reddit.com "{service}" ("necesito" OR "busco" OR "recomienden") "{place}"'
-    else:
-        general = f'"looking for" OR "need" "{service}" "{place}"'
-        facebook = f'site:facebook.com/groups "{service}" ("looking for" OR need OR recommend) "{place}"'
-        reddit = f'site:reddit.com "{service}" ("looking for" OR need OR recommend) "{place}"'
-    return [general, facebook, reddit]
-
+def _queries(service: str, place: str, search_lang: str, segment: str | None = None) -> list[str]:
+    """Build separate, source-specific lanes for an explicit service and market segment."""
+    qualifier = f'"{segment}" ' if segment else ""
+    intent = (
+        '("need" OR "looking for" OR "recommend" OR "anyone know")'
+        if search_lang.lower().startswith("en")
+        else '("necesito" OR "busco" OR "recomienden" OR "alguien conoce")'
+    )
+    core = f'"{service}" "{place}" {qualifier}{intent}'
+    return [
+        core,
+        f'site:facebook.com/groups {core}',
+        f'site:reddit.com {core}',
+    ]
 
 def _request_type(text: str) -> RequestType | None:
     for request_type in (
@@ -137,10 +173,19 @@ def _request_type(text: str) -> RequestType | None:
 
 
 def _service_matches(service: str, text: str) -> bool:
+    normalized_service = normalize_name(service)
     normalized_text = normalize_name(text)
-    terms = [term for term in normalize_name(service).split() if len(term) > 2]
-    return bool(terms) and any(term in normalized_text for term in terms)
+    alias = _SERVICE_ALIASES.get(normalized_service)
+    if alias:
+        return re.search(alias, normalized_text, re.IGNORECASE) is not None
 
+    terms = [term for term in normalized_service.split() if len(term) > 2]
+    if not terms:
+        return False
+    # A multiword service must match as a phrase; one generic token is insufficient.
+    return normalized_service in normalized_text if len(terms) > 1 else bool(
+        re.search(rf"\b{re.escape(terms[0])}\b", normalized_text)
+    )
 
 def _place_match(place: str | None, text: str) -> str | None:
     if place and normalize_name(place) in normalize_name(text):
