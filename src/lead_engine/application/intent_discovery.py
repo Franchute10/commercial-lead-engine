@@ -48,6 +48,7 @@ _BUYER_CONTEXT = re.compile(
 )
 _PROVIDER_LANGUAGE = re.compile(
     r"\b(we offer|our services|call us|book now|serving [a-z]|now accepting clients|"
+    r"(?:we(?:'re| are)\s+)?accepting\s+(?:new\s+)?clients|"
     r"new clients welcome|check out our|contact us|locally owned|family owned|"
     r"i own a|we are a|we're a|my company|our company|i am a professional|professional cleaner|"
     r"available for bookings|book your cleaning|ofrecemos|ll[aá]manos|"
