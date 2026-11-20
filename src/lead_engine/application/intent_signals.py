@@ -48,7 +48,9 @@ class IntentSignalService:
             raise DuplicateError("This public post has already been captured")
 
         now = utc_now()
-        age_days = (now - candidate.posted_at).total_seconds() / 86400 if candidate.posted_at else None
+        age_days = (
+            (now - candidate.posted_at).total_seconds() / 86400 if candidate.posted_at else None
+        )
         points = {
             RequestType.SERVICE_REQUEST: 35,
             RequestType.QUOTE_REQUEST: 40,
@@ -60,10 +62,7 @@ class IntentSignalService:
             reasons.append("Service requested is identified: +20")
 
         expected_places = [
-            campaign.city,
-            campaign.region,
-            campaign.country,
-            campaign.geography,
+            campaign.city or campaign.region or campaign.country or campaign.geography,
             *eligible_places,
         ]
         actual_places = [candidate.city, candidate.region, candidate.country]

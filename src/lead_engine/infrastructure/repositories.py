@@ -12,9 +12,9 @@ from sqlalchemy.orm import Session
 from lead_engine.domain.audit import WebsiteAudit
 from lead_engine.domain.contact_research import ContactIdentity, DecisionMakerResearchRun
 from lead_engine.domain.discovery import DiscoveryRun
-from lead_engine.domain.intent_signal import IntentSignal
 from lead_engine.domain.errors import DuplicateError, IdentityConflictError
 from lead_engine.domain.evidence_lifecycle import EvidenceDisposition
+from lead_engine.domain.intent_signal import IntentSignal
 from lead_engine.domain.models import (
     Campaign,
     Company,
@@ -46,8 +46,8 @@ from lead_engine.infrastructure.orm import (
     EntityRow,
     EvidenceDispositionRow,
     EvidenceRow,
-    LeadInteractionRow,
     IntentSignalRow,
+    LeadInteractionRow,
     LeadRow,
     LeadScoreRow,
     OutreachDraftRow,

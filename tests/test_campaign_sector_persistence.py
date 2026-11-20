@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from pydantic import ValidationError
-from sqlalchemy import inspect, text
+from sqlalchemy import Engine, inspect, text
 
 from lead_engine.domain.enums import CampaignType
 from lead_engine.domain.models import Campaign
@@ -91,10 +91,10 @@ def test_sector_classification_is_separate_from_targeting_and_profile() -> None:
 )
 def test_invalid_sector_classification_is_rejected(values: dict[str, str], message: str) -> None:
     with pytest.raises(ValidationError, match=message):
-        Campaign(name="Invalid", campaign_type=CampaignType.HEALTH, **values)
+        Campaign.model_validate({"name": "Invalid", "campaign_type": CampaignType.HEALTH, **values})
 
 
-def test_campaign_sector_and_subsector_round_trip(engine) -> None:
+def test_campaign_sector_and_subsector_round_trip(engine: Engine) -> None:
     campaign = Campaign(
         name="Round trip",
         campaign_type=CampaignType.HEALTH,
@@ -179,7 +179,7 @@ def test_migration_adds_nullable_classification_and_downgrades_without_losing_le
     command.upgrade(config, "head")
     engine = build_engine(database_url)
     try:
-        assert database_revision(engine) == "0012"
+        assert database_revision(engine) == "0014"
         assert {"sector_id", "subsector_id"} <= {
             column["name"] for column in inspect(engine).get_columns("campaigns")
         }
@@ -217,7 +217,7 @@ def test_migration_adds_nullable_classification_and_downgrades_without_losing_le
         engine.dispose()
 
 
-def test_latest_migration_head_is_0012() -> None:
+def test_latest_migration_head_is_0014() -> None:
     from lead_engine.infrastructure.schema import latest_revision
 
-    assert latest_revision() == "0012"
+    assert latest_revision() == "0014"

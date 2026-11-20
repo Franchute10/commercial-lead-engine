@@ -1,5 +1,6 @@
 """Profile-first resolution for validated commercial policy bundles."""
 
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -103,7 +104,7 @@ def test_sector_classification_and_sector_suggestion_do_not_select_policies() ->
 
 def _medical_director_score(
     campaign_type: CampaignType, mode: str
-) -> tuple[Campaign, int, int, int]:
+) -> tuple[Campaign, Decimal, Decimal, Decimal]:
     company = Company(canonical_name="Clinic")
     if mode == "normal":
         campaign = Campaign(name="Campaign", campaign_type=campaign_type)

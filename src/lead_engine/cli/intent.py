@@ -3,15 +3,17 @@
 import json
 from dataclasses import asdict
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import typer
 
 from lead_engine.application.intent_discovery import IntentDiscoveryService
+from lead_engine.application.intent_evaluation import RunJournal, evaluate, label_result
 from lead_engine.application.intent_signals import IntentSignalService
 from lead_engine.cli.common import DatabaseOption, admin_errors, transaction
-from lead_engine.domain.intent_signal import IntentSignal, RequestType, SignalPlatform
+from lead_engine.domain.intent_signal import RequestType, SignalPlatform
 from lead_engine.domain.models import Campaign
 from lead_engine.infrastructure.database import DEFAULT_DATABASE_URL
 from lead_engine.infrastructure.public_search import TavilySearchProvider
@@ -100,18 +102,27 @@ def capture(
             typer.echo(record.model_dump_json())
 
 
-
 @intent_app.command("discover")
 def discover(
     campaign: Annotated[str, typer.Option("--campaign")],
-    service: Annotated[str, typer.Option("--service", help="Service phrase, for example house cleaning")],
+    service: Annotated[
+        str, typer.Option("--service", help="Service phrase, for example house cleaning")
+    ],
     segment: Annotated[
         str | None,
-        typer.Option("--segment", help="Target buyer segment, e.g. homeowners or property managers"),
+        typer.Option(
+            "--segment", help="Target buyer segment, e.g. homeowners or property managers"
+        ),
     ] = None,
-    country: Annotated[str, typer.Option("--country", help="Two-letter search country code")] = "US",
-    language: Annotated[str, typer.Option("--language", help="Search language, for example en or es")] = "en",
-    freshness: Annotated[str, typer.Option("--freshness", help="Tavily time range: pd, pw, pm, or py")] = "pm",
+    country: Annotated[
+        str, typer.Option("--country", help="Two-letter search country code")
+    ] = "US",
+    language: Annotated[
+        str, typer.Option("--language", help="Search language, for example en or es")
+    ] = "en",
+    freshness: Annotated[
+        str, typer.Option("--freshness", help="Tavily time range: pd, pw, pm, or py")
+    ] = "pm",
     per_query: Annotated[int, typer.Option("--per-query", min=1, max=20)] = 10,
     zones: Annotated[
         list[str] | None,
@@ -138,6 +149,13 @@ def discover(
             help="Print up to 15 public search results discarded by the intent filters",
         ),
     ] = False,
+    include_published_date: Annotated[
+        bool,
+        typer.Option("--include-published-date", help="Request index dates (experiment arm B)"),
+    ] = False,
+    run_file: Annotated[
+        Path | None, typer.Option("--run-file", help="New JSONL evidence file")
+    ] = None,
     database_url: DatabaseOption = DEFAULT_DATABASE_URL,
 ) -> None:
     """Search indexed public discussions and save buyer-intent candidates for review."""
@@ -155,36 +173,65 @@ def discover(
         if zones:
             typer.echo("Additional search zones: " + json.dumps(zones, ensure_ascii=False))
         campaign_id = _campaign_id(campaign, database_url)
-        with transaction(database_url) as uow:
-            discovery = IntentDiscoveryService(uow, TavilySearchProvider())
-            records, ignored, query_count = discovery.discover(
-                campaign_id=campaign_id,
-                service=service,
-                country_code=country,
-                search_lang=language,
-                count=per_query,
-                freshness=freshness,
-                segment=segment,
-                additional_terms=additional_terms,
-                zones=tuple(zones or ()),
-                show_filtered=show_filtered,
-            )
-            uow.commit()
-            qualified = sum(record.qualified_candidate for record in records)
-            typer.echo(
-                f"Searches: {query_count}; candidates: {len(records)}; "
-                f"qualified: {qualified}; review needed: {len(records) - qualified}; "
-                f"filtered or duplicate: {ignored}"
-            )
-            typer.echo(f"Source hits: {discovery.search_lane_counts}")
-            typer.echo(f"Filter reasons: {discovery.rejection_counts}")
-            if show_filtered and discovery.filtered_samples:
-                typer.echo(
-                    "Filtered samples: "
-                    + json.dumps(discovery.filtered_samples, ensure_ascii=False)
+        journal = RunJournal(
+            run_file or Path("pilot_local/intent") / f"{uuid4()}.jsonl",
+            {
+                "campaign_id": str(campaign_id),
+                "service": service,
+                "segment": segment,
+                "country": country,
+                "language": language,
+                "freshness": freshness,
+                "per_query": per_query,
+                "zones": zones or [],
+                "website": website,
+                "website_terms": additional_terms,
+                "include_published_date": include_published_date,
+                "arm": "B_dates" if include_published_date else "A_baseline",
+            },
+        )
+        typer.echo(f"Run evidence: {journal.path}")
+        try:
+            with transaction(database_url) as uow:
+                discovery = IntentDiscoveryService(
+                    uow, TavilySearchProvider(include_published_date=include_published_date)
                 )
-            for record in records:
-                typer.echo(record.model_dump_json())
+                records, ignored, query_count = discovery.discover(
+                    campaign_id=campaign_id,
+                    service=service,
+                    country_code=country,
+                    search_lang=language,
+                    count=per_query,
+                    freshness=freshness,
+                    segment=segment,
+                    additional_terms=additional_terms,
+                    zones=tuple(zones or ()),
+                    show_filtered=show_filtered,
+                    observe=journal.append,
+                )
+                uow.commit()
+                journal.append({"event": "complete", "candidates": len(records)})
+                qualified = sum(record.qualified_candidate for record in records)
+                typer.echo(
+                    f"Searches: {query_count}; candidates: {len(records)}; "
+                    f"qualified: {qualified}; review needed: {len(records) - qualified}; "
+                    f"filtered or duplicate: {ignored}"
+                )
+                typer.echo(f"Source hits: {discovery.search_lane_counts}")
+                typer.echo(f"Filter reasons: {discovery.rejection_counts}")
+                if show_filtered and discovery.filtered_samples:
+                    typer.echo(
+                        "Filtered samples: "
+                        + json.dumps(discovery.filtered_samples, ensure_ascii=False)
+                    )
+                for record in records:
+                    typer.echo(record.model_dump_json())
+
+        except BaseException:
+            journal.append(
+                {"event": "failed", "note": "Run interrupted; inspect local error output"}
+            )
+            raise
 
 
 @intent_app.command("list")
@@ -198,3 +245,26 @@ def list_signals(
         with transaction(database_url) as uow:
             for record in IntentSignalService(uow).list_for_campaign(campaign_id):
                 typer.echo(record.model_dump_json())
+
+
+@intent_app.command("label")
+def label(
+    run_file: Annotated[Path, typer.Option("--run-file")],
+    url: Annotated[str, typer.Option("--url")],
+    value: Annotated[str, typer.Option("--label")],
+    note: str = "",
+) -> None:
+    """Append a human assessment; corrections preserve previous labels."""
+    with admin_errors():
+        label_result(run_file, url, value, note)
+        typer.echo("Human label recorded; no contact or outreach performed.")
+
+
+@intent_app.command("report")
+def report(
+    run_file: Annotated[Path, typer.Option("--run-file")],
+    truth_file: Annotated[Path | None, typer.Option("--truth-file")] = None,
+) -> None:
+    """Evaluate saved evidence, optionally against a manual URL reference set."""
+    with admin_errors():
+        typer.echo(json.dumps(evaluate(run_file, truth_file), ensure_ascii=False, indent=2))

@@ -36,7 +36,7 @@ def test_registry_has_exact_supported_versioned_profiles() -> None:
 def test_profiles_are_immutable_and_unknown_ids_fail_clearly() -> None:
     profile = get_campaign_profile("health-v1")
     with pytest.raises(ValidationError):
-        profile.name = "Changed"  # type: ignore[misc]
+        profile.name = "Changed"
     with pytest.raises(LookupError, match="Unknown campaign profile"):
         get_campaign_profile("unknown-v1")
 
@@ -155,7 +155,9 @@ def test_profile_identifiers_are_validated() -> None:
                 scoring_profile="health-v1",
                 research_profile="health-research-v3",
                 shortlist_profile="daily-shortlist-v1",
-                **fields,
+                profile_id=fields["profile_id"],
+                version=fields["version"],
+                name=fields["name"],
             )
 
 

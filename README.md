@@ -62,7 +62,8 @@ Timestamps must be timezone-aware and are persisted as UTC. Confidence is 0–1;
 0–100 ordering hint. Scores use Decimal points with up to four decimal places. Component maximums
 must sum to 100, awarded points must not exceed their maximums, and total_score must equal the sum
 of awarded points. Criteria are unique per score. Components and evidence references have stable
-ordering for round trips. Score evidence must belong to the lead's company. No scoring policy is implemented.
+ordering for round trips. Score evidence must belong to the lead's company. Versioned commercial
+scoring policies are implemented; their scores are prioritization hints, not proof of purchase intent.
 
 Evidence is separate from Company; manual company records can exist before research. Conclusions
 should be recorded with evidence rather than inferred from a contact role or a pipeline status.
@@ -501,3 +502,13 @@ For Spanish-language searches use --language es and the appropriate two-letter c
 To inspect search phrases from a public business website before using them, run `lead-engine intent profile --website https://example.com`. If the suggested phrases are relevant, repeat the URL with `intent discover --website https://example.com --include-website-terms`. Website reading uses the existing bounded public-URL fetcher and obeys robots rules. Extracted phrases expand the search vocabulary; they do not establish lead evidence. Nextdoor results come only from publicly indexed pages through Tavily; direct API use requires separate access and terms review.
 
 Tavily's free Researcher plan currently includes 1,000 credits per month and does not require a credit card. Paid usage is optional; check current limits and pricing before enabling it. See [Tavily pricing](https://www.tavily.com/pricing) and the [Search API documentation](https://docs.tavily.com/documentation/api-reference/endpoint/search). Coverage depends on Tavily's index; Facebook group coverage is not guaranteed.
+
+## Intent discovery evaluation
+
+`intent discover` now writes all search evidence and decisions to a local JSONL
+journal, including discarded results and failed-run progress. Use
+`--include-published-date` for the date-request experiment arm and `--run-file` to
+choose a new output file. `intent label` records human review; `intent report`
+computes coverage, labelled precision and optional recall against manual URLs.
+See [the reproducible PowerShell protocol](docs/intent-evaluation.md).
+A machine-qualified candidate is still not a verified, contactable buyer.

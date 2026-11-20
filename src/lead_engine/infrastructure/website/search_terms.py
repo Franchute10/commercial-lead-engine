@@ -65,9 +65,7 @@ def extract_website_search_profile(website: str, html: str) -> WebsiteSearchProf
 
     title = _clean(soup.title.get_text(" ", strip=True)) if soup.title else None
     description_tag = soup.find("meta", attrs={"name": re.compile("^description$", re.I)})
-    description = (
-        _clean(str(description_tag.get("content", ""))) if description_tag else None
-    )
+    description = _clean(str(description_tag.get("content", ""))) if description_tag else None
     headings = tuple(
         dict.fromkeys(
             phrase

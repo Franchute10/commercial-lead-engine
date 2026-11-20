@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
+from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -13,8 +16,7 @@ from lead_engine.domain.errors import DuplicateError
 from lead_engine.domain.identity import normalize_name
 from lead_engine.domain.intent_signal import IntentSignal, RequestType, SignalPlatform
 from lead_engine.domain.models import Campaign
-from lead_engine.infrastructure.public_search import TavilySearchProvider, SearchHit
-
+from lead_engine.infrastructure.public_search import SearchHit, TavilySearchProvider
 
 _REQUEST_PATTERNS = {
     RequestType.QUOTE_REQUEST: re.compile(
@@ -46,6 +48,7 @@ _BUYER_CONTEXT = re.compile(
 )
 _PROVIDER_LANGUAGE = re.compile(
     r"\b(we offer|our services|call us|book now|serving [a-z]|now accepting clients|"
+    r"(?:we(?:'re| are)\s+)?accepting\s+(?:new\s+)?clients|"
     r"new clients welcome|check out our|contact us|locally owned|family owned|"
     r"i own a|we are a|we're a|my company|our company|i am a professional|professional cleaner|"
     r"available for bookings|book your cleaning|ofrecemos|ll[aá]manos|"
@@ -144,6 +147,7 @@ class IntentDiscoveryService:
         additional_terms: tuple[str, ...] = (),
         zones: tuple[str, ...] = (),
         show_filtered: bool = False,
+        observe: Callable[[dict[str, Any]], None] | None = None,
     ) -> tuple[list[IntentSignal], int, int]:
         campaign = self.repository.get(Campaign, campaign_id)
         if campaign is None:
@@ -157,11 +161,7 @@ class IntentDiscoveryService:
         if len(zones) > 4:
             raise ValueError("Use at most four additional zones per discovery run")
         places = tuple(
-            dict.fromkeys(
-                value.strip()
-                for value in (place, *zones)
-                if value and value.strip()
-            )
+            dict.fromkeys(value.strip() for value in (place, *zones) if value and value.strip())
         )
         queries = _queries(
             service,
@@ -183,9 +183,15 @@ class IntentDiscoveryService:
             "duplicate": 0,
         }
         self.filtered_samples: list[dict[str, str]] = []
+        current: dict[str, Any] = {}
+
+        def emit(outcome: str) -> None:
+            if observe is not None:
+                observe({**current, "event": "result", "outcome": outcome})
 
         def reject(reason: str, hit: SearchHit, text: str) -> None:
             self.rejection_counts[reason] += 1
+            emit(reason)
             if show_filtered and len(self.filtered_samples) < 15:
                 self.filtered_samples.append(
                     {
@@ -200,6 +206,16 @@ class IntentDiscoveryService:
         self.search_lane_counts = {}
 
         for query_index, query in enumerate(queries):
+            lane_name = lane_names[query_index % len(lane_names)]
+            if observe is not None:
+                observe(
+                    {
+                        "event": "query",
+                        "query_index": query_index,
+                        "query": query,
+                        "lane": lane_name,
+                    }
+                )
             hits = self.provider.search(
                 query,
                 country=country_code,
@@ -208,16 +224,37 @@ class IntentDiscoveryService:
                 count=count,
             )
             lane_name = lane_names[query_index % len(lane_names)]
-            self.search_lane_counts[lane_name] = (
-                self.search_lane_counts.get(lane_name, 0) + len(hits)
+            self.search_lane_counts[lane_name] = self.search_lane_counts.get(lane_name, 0) + len(
+                hits
             )
-            for hit in hits:
+            for rank, hit in enumerate(hits, 1):
+                # Preserve provider evidence in the audit; keep existing filter input bounded.
+                filter_text = f"{hit.title} {hit.excerpt[:1000]}".strip()
+                date = _parse_age(hit.page_age)
+                current = {
+                    "query_index": query_index,
+                    "query": query,
+                    "lane": lane_name,
+                    "rank": rank,
+                    "url": hit.url,
+                    "title": hit.title,
+                    "excerpt": hit.excerpt,
+                    "provider_date": hit.page_age,
+                    "parsed_date": date.isoformat() if date else None,
+                    "captured_at": datetime.now(UTC).isoformat(),
+                    "request_signal": _request_type(filter_text) is not None,
+                    "service_match": _service_matches(service, filter_text),
+                    "geo_match": any(_place_match(p, filter_text) for p in places),
+                    "employment_flag": bool(_EMPLOYMENT_LANGUAGE.search(filter_text)),
+                    "date_status": "INDEX_DATE_UNVERIFIED" if date else "DATE_UNKNOWN",
+                    "contact_status": "CONTACT_NOT_VERIFIED",
+                }
                 if hit.url in seen:
                     ignored += 1
                     reject("duplicate", hit, f"{hit.title} {hit.excerpt}".strip())
                     continue
                 seen.add(hit.url)
-                text = f"{hit.title} {hit.excerpt}".strip()
+                text = filter_text
                 request_type = _request_type(text)
                 if request_type is None:
                     ignored += 1
@@ -249,6 +286,7 @@ class IntentDiscoveryService:
                 region = _place_match(campaign.region, text)
                 country = _place_match(campaign.country, text)
                 platform = _platform(hit.url)
+                current["filter_passed"] = True
                 try:
                     record = self.signals.capture(
                         campaign_id=campaign_id,
@@ -264,9 +302,13 @@ class IntentDiscoveryService:
                         eligible_places=places,
                     )
                 except DuplicateError:
+                    current["duplicate_scope"] = "database"
                     ignored += 1
-                    self.rejection_counts["duplicate"] += 1
+                    reject("duplicate", hit, text)
                     continue
+                current["signal_id"] = str(record.id)
+                current["qualified_candidate"] = record.qualified_candidate
+                emit("candidate")
                 saved.append(record)
         return saved, ignored, len(queries)
 
@@ -300,8 +342,8 @@ def _queries(
         queries.extend(
             (
                 core,
-                f'site:facebook.com/groups {social_core}',
-                f'site:nextdoor.com {social_core}',
+                f"site:facebook.com/groups {social_core}",
+                f"site:nextdoor.com {social_core}",
             )
         )
     return queries
@@ -312,12 +354,12 @@ def _safe_query_terms(terms: tuple[str, ...]) -> tuple[str, ...]:
     for term in terms:
         cleaned = re.sub(r"[^\w &'-]", " ", term, flags=re.UNICODE)
         cleaned = " ".join(cleaned.split()).strip(" -'&")[:45]
-        if (
-            2 <= len(cleaned.split()) <= 8
-            and cleaned.casefold() not in {value.casefold() for value in candidates}
-        ):
+        if 2 <= len(cleaned.split()) <= 8 and cleaned.casefold() not in {
+            value.casefold() for value in candidates
+        }:
             candidates.append(cleaned)
     return tuple(candidates)
+
 
 def _request_type(text: str) -> RequestType | None:
     for request_type in (
@@ -341,9 +383,12 @@ def _service_matches(service: str, text: str) -> bool:
     if not terms:
         return False
     # A multiword service must match as a phrase; one generic token is insufficient.
-    return normalized_service in normalized_text if len(terms) > 1 else bool(
-        re.search(rf"\b{re.escape(terms[0])}\b", normalized_text)
+    return (
+        normalized_service in normalized_text
+        if len(terms) > 1
+        else bool(re.search(rf"\b{re.escape(terms[0])}\b", normalized_text))
     )
+
 
 def _place_match(place: str | None, text: str) -> str | None:
     normalized_place = normalize_name(place or "")
@@ -378,6 +423,14 @@ def _parse_age(value: str | None) -> datetime | None:
         # signal when it is captured.
         return None if parsed > datetime.now(UTC) else parsed
     except ValueError:
+        pass
+    try:
+        parsed = parsedate_to_datetime(normalized)
+        if parsed.tzinfo is None:
+            return None
+        parsed = parsed.astimezone(UTC)
+        return None if parsed > datetime.now(UTC) else parsed
+    except (ValueError, TypeError, OverflowError):
         pass
     match = re.fullmatch(r"(\d+)\s+(minute|hour|day|week|month)s?\s+ago", normalized, re.I)
     if not match:

@@ -6,7 +6,7 @@ from uuid import UUID
 import pytest
 from alembic import command
 from pydantic import ValidationError
-from sqlalchemy import inspect, text
+from sqlalchemy import Engine, inspect, text
 from typer.testing import CliRunner
 
 from lead_engine.application.sector_suggestions import SectorSuggestionService
@@ -52,7 +52,7 @@ def test_unmapped_and_manually_mapped_inputs_preserve_name_without_profile_infer
 )
 def test_invalid_suggestion_combinations_are_rejected(values: dict[str, str]) -> None:
     with pytest.raises(ValidationError):
-        SectorSuggestion(**values)
+        SectorSuggestion.model_validate(values)
 
 
 def test_sector_catalog_is_not_mutated() -> None:
@@ -61,7 +61,7 @@ def test_sector_catalog_is_not_mutated() -> None:
     assert tuple(DEFAULT_SECTORS) == before
 
 
-def test_changed_sector_clears_stale_mapping_and_preserves_review_context(engine) -> None:
+def test_changed_sector_clears_stale_mapping_and_preserves_review_context(engine: Engine) -> None:
     with SqlAlchemyUnitOfWork(engine) as uow:
         service = SectorSuggestionService(uow)
         submitted = service.submit("Seguridad clínica", "health", "private-clinics", "health-v1")
@@ -98,7 +98,7 @@ def test_changed_sector_clears_stale_mapping_and_preserves_review_context(engine
             SectorSuggestionService(uow).mark_needs_review(submitted.id)
 
 
-def test_explicit_new_review_note_replaces_prior_note(engine) -> None:
+def test_explicit_new_review_note_replaces_prior_note(engine: Engine) -> None:
     with SqlAlchemyUnitOfWork(engine) as uow:
         service = SectorSuggestionService(uow)
         submitted = service.submit(
@@ -113,7 +113,7 @@ def test_explicit_new_review_note_replaces_prior_note(engine) -> None:
         uow.commit()
 
 
-def test_lifecycle_and_round_trip(engine) -> None:
+def test_lifecycle_and_round_trip(engine: Engine) -> None:
     with SqlAlchemyUnitOfWork(engine) as uow:
         service = SectorSuggestionService(uow)
         provisional = service.submit("  Seguridad electrónica  ")
@@ -295,7 +295,7 @@ def test_migration_is_additive_and_downgrade_preserves_existing_records(
                 },
             )
         command.upgrade(migration_config(database_url), "head")
-        assert database_revision(engine) == "0012"
+        assert database_revision(engine) == "0014"
         assert "sector_suggestions" in inspect(engine).get_table_names()
         assert "campaigns" in inspect(engine).get_table_names()
         command.downgrade(migration_config(database_url), "0011")
