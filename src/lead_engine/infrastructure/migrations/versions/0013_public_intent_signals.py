@@ -41,7 +41,9 @@ def upgrade() -> None:
             "request_type IN ('SERVICE_REQUEST','QUOTE_REQUEST','RECOMMENDATION_REQUEST')",
             name="intent_signal_request_type",
         ),
-        sa.CheckConstraint("intent_score >= 0 AND intent_score <= 100", name="ck_intent_signal_score"),
+        sa.CheckConstraint(
+            "intent_score >= 0 AND intent_score <= 100", name="ck_intent_signal_score"
+        ),
         sa.UniqueConstraint("source_url", name="uq_intent_signal_source_url"),
     )
 

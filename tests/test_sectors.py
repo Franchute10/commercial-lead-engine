@@ -63,7 +63,7 @@ def test_catalog_records_are_immutable_and_registries_are_read_only() -> None:
     with pytest.raises(TypeError):
         DEFAULT_SUBSECTORS["new"] = get_subsector("dental")  # type: ignore[index]
     with pytest.raises(ValidationError):
-        get_sector("health").name = "Changed"  # type: ignore[misc]
+        get_sector("health").name = "Changed"
 
 
 def test_registries_reject_duplicate_ids_display_orders_and_orphan_subsectors() -> None:

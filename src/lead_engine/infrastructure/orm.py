@@ -22,7 +22,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from lead_engine.domain.audit import AuditStatus
 from lead_engine.domain.discovery import DiscoveryStatus
-from lead_engine.domain.intent_signal import RequestType, SignalPlatform
 from lead_engine.domain.enums import (
     CampaignType,
     InteractionType,
@@ -30,6 +29,7 @@ from lead_engine.domain.enums import (
     RoleCategory,
     SourceType,
 )
+from lead_engine.domain.intent_signal import RequestType, SignalPlatform
 from lead_engine.domain.sectors import SectorSuggestionStatus
 from lead_engine.infrastructure.types import UTCDateTime
 
@@ -478,6 +478,7 @@ class IntentSignalRow(EntityRow):
             native_enum=False,
             create_constraint=True,
             name="intent_signal_platform",
+            length=40,
         )
     )
     source_url: Mapped[str] = mapped_column(String(2048))
@@ -487,6 +488,7 @@ class IntentSignalRow(EntityRow):
             native_enum=False,
             create_constraint=True,
             name="intent_signal_request_type",
+            length=40,
         )
     )
     service_requested: Mapped[str] = mapped_column(String(1000))

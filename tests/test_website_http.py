@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 
 import httpx
 import pytest
@@ -295,7 +295,7 @@ def test_transport_does_not_forward_cookies_or_credentials() -> None:
 
 def test_large_html_preserves_bounded_partial_prefix() -> None:
     prefix = (
-        b'<html><head>'
+        b"<html><head>"
         b'<meta name="viewport" content="width=device-width">'
         b'</head><body><a href="/book">Reservar cita</a>'
     )
@@ -336,9 +336,9 @@ def test_read_timeout_after_partial_body_preserves_prefix() -> None:
         def __init__(self, request: httpx.Request) -> None:
             self.request = request
 
-        def __iter__(self):
+        def __iter__(self) -> Iterator[bytes]:
             yield (
-                b'<html><head>'
+                b"<html><head>"
                 b'<meta name="viewport" content="width=device-width">'
                 b'</head><body><a href="/book">Reservar cita</a>'
             )

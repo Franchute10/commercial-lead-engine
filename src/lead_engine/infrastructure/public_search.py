@@ -36,9 +36,16 @@ class SearchHit:
 class TavilySearchProvider:
     """Search Tavily's public web index; never fetches or logs the API credential."""
 
-    def __init__(self, api_key: str | None = None, timeout_seconds: float = 10.0) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        timeout_seconds: float = 10.0,
+        *,
+        include_published_date: bool = False,
+    ) -> None:
         self.api_key = api_key or os.getenv("TAVILY_API_KEY")
         self.timeout_seconds = timeout_seconds
+        self.include_published_date = include_published_date
 
     def search(
         self,
@@ -84,6 +91,8 @@ class TavilySearchProvider:
             "include_answer": False,
             "include_raw_content": False,
         }
+        if self.include_published_date:
+            payload["include_published_date"] = True
         if "site:facebook.com/groups" in query:
             payload["include_domains"] = ["facebook.com"]
         elif "site:nextdoor.com" in query:
@@ -101,13 +110,9 @@ class TavilySearchProvider:
             response.raise_for_status()
             result = response.json()
         except httpx.HTTPStatusError as exc:
-            raise OSError(
-                f"Public search request failed: HTTP {exc.response.status_code}"
-            ) from exc
+            raise OSError(f"Public search request failed: HTTP {exc.response.status_code}") from exc
         except httpx.HTTPError as exc:
-            raise OSError(
-                f"Public search request failed: {exc.__class__.__name__}"
-            ) from exc
+            raise OSError(f"Public search request failed: {exc.__class__.__name__}") from exc
 
         if not isinstance(result, Mapping):
             raise OSError("Public search returned an invalid response")
@@ -128,7 +133,7 @@ class TavilySearchProvider:
                 SearchHit(
                     title=title or url,
                     url=url,
-                    excerpt=excerpt[:1000],
+                    excerpt=excerpt,
                     page_age=_optional_text(item.get("published_date")),
                     result_type="web",
                 )

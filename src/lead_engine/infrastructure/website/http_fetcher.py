@@ -94,9 +94,7 @@ class HttpxFetcher:
                         else self.settings.max_response_bytes
                     )
 
-                    content_type = (
-                        headers.get("content-type", "").split(";", 1)[0].strip().lower()
-                    )
+                    content_type = headers.get("content-type", "").split(";", 1)[0].strip().lower()
                     partial_html_allowed = not robots and content_type in {
                         "text/html",
                         "application/xhtml+xml",
@@ -128,9 +126,7 @@ class HttpxFetcher:
                                 if available > 0:
                                     chunks.append(chunk[:available])
                                     size += available
-                                warnings.append(
-                                    "HTML response truncated at configured byte limit"
-                                )
+                                warnings.append("HTML response truncated at configured byte limit")
                                 break
 
                             chunks.append(chunk)
@@ -143,21 +139,16 @@ class HttpxFetcher:
                                         "partial content retained"
                                     )
                                     break
-                                raise FetchPolicyError(
-                                    "TIMEOUT", "Total fetch budget exhausted"
-                                )
+                                raise FetchPolicyError("TIMEOUT", "Total fetch budget exhausted")
 
                             if partial_html_allowed and declared_too_large and size >= cap:
-                                warnings.append(
-                                    "HTML response truncated at configured byte limit"
-                                )
+                                warnings.append("HTML response truncated at configured byte limit")
                                 break
 
                     except httpx.ReadTimeout:
                         if partial_html_allowed and chunks:
                             warnings.append(
-                                "HTML read timeout after partial response; "
-                                "partial content retained"
+                                "HTML read timeout after partial response; partial content retained"
                             )
                         else:
                             raise
