@@ -2,7 +2,7 @@
 
 This repository is a **satellite research/engineering project**, not AEOS Core.
 
-The project charter, current roadmap, cross-repository status and handoff rules are maintained in the canonical [AEOS Project Handbook](https://github.com/Franchute10/autonomous-agent-economy/blob/docs/aeos-project-handbook/PROJECT_HANDBOOK.md). After that handbook PR merges, use the `main` link.
+The project charter, current roadmap, cross-repository status and handoff rules are maintained in the canonical [AEOS Project Handbook](https://github.com/Franchute10/autonomous-agent-economy/blob/main/PROJECT_HANDBOOK.md).
 
 ## Current boundary
 
