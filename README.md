@@ -1,5 +1,7 @@
 # Commercial Lead Engine
 
+[Dirección de producto, pruebas y siguiente tarea](docs/aeos-product-control.md) (2026-11-20).
+
 Local-first commercial research foundation. The engine models the gap between a company's
 commercial potential and its digital/customer acquisition capability. It does not equate
 opportunity with absence of a website. Important conclusions are stored as attributed evidence.
