@@ -22,6 +22,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from lead_engine.domain.audit import AuditStatus
 from lead_engine.domain.discovery import DiscoveryStatus
+from lead_engine.domain.intent_signal import RequestType, SignalPlatform
 from lead_engine.domain.enums import (
     CampaignType,
     InteractionType,
@@ -462,3 +463,39 @@ class PilotEvaluationRow(EntityRow):
         ),
         CheckConstraint("outreach_quality IN ('GOOD','PARTIAL','WRONG')", name="ck_pilot_outreach"),
     )
+
+
+class IntentSignalRow(EntityRow):
+    __tablename__ = "intent_signals"
+    __table_args__ = (
+        UniqueConstraint("source_url", name="uq_intent_signal_source_url"),
+        CheckConstraint("intent_score >= 0 AND intent_score <= 100", name="ck_intent_signal_score"),
+    )
+    campaign_id: Mapped[UUID] = mapped_column(ForeignKey("campaigns.id"), index=True)
+    platform: Mapped[SignalPlatform] = mapped_column(
+        Enum(
+            SignalPlatform,
+            native_enum=False,
+            create_constraint=True,
+            name="intent_signal_platform",
+        )
+    )
+    source_url: Mapped[str] = mapped_column(String(2048))
+    request_type: Mapped[RequestType] = mapped_column(
+        Enum(
+            RequestType,
+            native_enum=False,
+            create_constraint=True,
+            name="intent_signal_request_type",
+        )
+    )
+    service_requested: Mapped[str] = mapped_column(String(1000))
+    evidence_excerpt: Mapped[str] = mapped_column(String(1000))
+    city: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    region: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    posted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    intent_score: Mapped[int] = mapped_column(Integer)
+    score_explanation: Mapped[str] = mapped_column(String(2000))
+    qualified_candidate: Mapped[bool] = mapped_column(Boolean)

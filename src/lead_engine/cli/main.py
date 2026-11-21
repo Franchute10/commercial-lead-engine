@@ -11,6 +11,7 @@ from lead_engine.application.services import LeadService
 from lead_engine.cli.audit import audit_app
 from lead_engine.cli.common import DatabaseOption, admin_errors, transaction
 from lead_engine.cli.contacts import contact_app
+from lead_engine.cli.intent import intent_app
 from lead_engine.cli.outreach import outreach_app
 from lead_engine.cli.pilot import pilot_app
 from lead_engine.cli.research import research_app
@@ -54,6 +55,7 @@ app.add_typer(contact_app, name="contact")
 app.add_typer(score_app, name="score")
 app.add_typer(evidence_app, name="evidence")
 app.add_typer(audit_app, name="audit")
+app.add_typer(intent_app, name="intent")
 app.add_typer(scout_app, name="scout")
 app.add_typer(db_app, name="db")
 app.add_typer(company_app, name="company")
